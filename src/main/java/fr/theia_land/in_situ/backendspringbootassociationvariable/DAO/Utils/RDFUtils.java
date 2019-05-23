@@ -80,7 +80,7 @@ public class RDFUtils {
         for (int i = 0; i < updateString.size(); i++) {
 
                 update = UpdateFactory.create(updateString.get(i));
-                uExec = UpdateExecutionFactory.createRemote(update, "http://in-situ.theia-land.frdd:3030/theia_vocabulary/", httpclient);
+                uExec = UpdateExecutionFactory.createRemote(update, "http://in-situ.theia-land.fr:3030/theia_vocabulary/", httpclient);
                 uExec.execute();
 
         }
