@@ -10,6 +10,7 @@ import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.RDFU
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.VariableAssociationsRepository;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.Entities.TheiaVariableName;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -17,8 +18,11 @@ import java.util.stream.Collectors;
 import org.apache.commons.text.CaseUtils;
 import org.apache.jena.rdfconnection.RDFConnection;
 import org.apache.jena.rdfconnection.RDFConnectionFactory;
+import org.apache.jena.sparql.ARQException;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -33,6 +37,8 @@ import org.springframework.data.mongodb.core.aggregation.SortOperation;
 import org.springframework.data.mongodb.core.aggregation.UnwindOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,6 +55,8 @@ import sun.text.Normalizer;
 @RequestMapping("/association")
 //@CrossOrigin(origins = {"http://localhost"})
 public class VariableAssociationsController {
+
+    private static final Logger logger = LoggerFactory.getLogger(VariableAssociationsController.class);
 
     /**
      * Inject the repository to be queried
@@ -168,13 +176,13 @@ public class VariableAssociationsController {
     @PostMapping("/setVariablesAlreadyAssociatedToCategories")
     private List<TheiaVariableName> setVariablesAlreadyAssociatedToCategories(@RequestBody String categories) {
         JSONArray json = new JSONArray(categories);
-        List<String> uriCategories = (List<String>)(List<?>)json.toList();
+        List<String> uriCategories = (List<String>) (List<?>) json.toList();
         List<Criteria> orCriteriasList = new ArrayList<>();
         for (String category : uriCategories) {
             orCriteriasList.add(Criteria.where("observation.observedProperty.theiaCategories").is(category));
         }
         Criteria[] orCriterias = new Criteria[orCriteriasList.size()];
-        for(int i= 0; i<orCriteriasList.size();i++) {
+        for (int i = 0; i < orCriteriasList.size(); i++) {
             orCriterias[i] = orCriteriasList.get(i);
         }
 
@@ -189,11 +197,12 @@ public class VariableAssociationsController {
     }
 
     @PostMapping("/createANewTheiaVariable")
-    private String createANewTheiaVariable(@RequestBody String info) {
+    private ResponseEntity<String> createANewTheiaVariable(@RequestBody String info) {
+        String response;
         JSONObject json = new JSONObject(info);
         String prefLabel = json.getString("prefLabel");
-        List<String> categories = (List<String>)(List<?>)(json.getJSONArray("broaders").toList());
-        
+        List<String> categories = (List<String>) (List<?>) (json.getJSONArray("broaders").toList());
+
         String uri = Normalizer.normalize(prefLabel, java.text.Normalizer.Form.NFD, 0)
                 .replaceAll("[^\\p{ASCII}]", "")
                 .replaceAll("[^a-zA-Z0-9 ]", "");
@@ -201,16 +210,26 @@ public class VariableAssociationsController {
 
         try (RDFConnection conn = RDFConnectionFactory.connect("http://in-situ.theia-land.fr:3030/theia_vocabulary/")) {
 
+            /**
+             * Created to avoid circular reference (broader and narrower), if the uri is already used in categories
+             * "Variable" is added at the end of the uri.
+             */
             if (RDFUtils.existSkosVariable(uri)) {
                 String uriTmp = new String(uri);
-                int i = 1;
-                while (RDFUtils.existSkosVariable(uri)) {
-                    uri = uriTmp + "V" + i;
-                    i++;
-                }
+                uri = uriTmp + "Variable";
             }
-            RDFUtils.insertSkosVariable(uri, prefLabel, categories);
+            try {
+                RDFUtils.insertSkosVariable(uri, prefLabel, categories);
+            } catch (ARQException ex) {
+                logger.error(ex.getMessage());
+                response = ex.getMessage();
+                return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+            } catch(Exception ex) {
+                logger.error(ex.getMessage());
+                response = ex.getMessage();
+                return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+            }
         }
-        return uri;
+        return new ResponseEntity<>(uri, HttpStatus.ACCEPTED);
     }
 }
