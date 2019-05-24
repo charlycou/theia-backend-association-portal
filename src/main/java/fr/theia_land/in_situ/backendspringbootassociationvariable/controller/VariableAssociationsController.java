@@ -12,6 +12,7 @@ import fr.theia_land.in_situ.backendspringbootassociationvariable.model.Entities
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -197,8 +198,8 @@ public class VariableAssociationsController {
     }
 
     @PostMapping("/createANewTheiaVariable")
-    private ResponseEntity<String> createANewTheiaVariable(@RequestBody String info) {
-        String response;
+    private ResponseEntity<Map<String, String>> createANewTheiaVariable(@RequestBody String info) {
+        Map<String, String> response = new HashMap();
         JSONObject json = new JSONObject(info);
         String prefLabel = json.getString("prefLabel");
         List<String> categories = (List<String>) (List<?>) (json.getJSONArray("broaders").toList());
@@ -222,14 +223,17 @@ public class VariableAssociationsController {
                 RDFUtils.insertSkosVariable(uri, prefLabel, categories);
             } catch (ARQException ex) {
                 logger.error(ex.getMessage());
-                response = ex.getMessage();
+                response.put("error", ex.getMessage());
                 return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
-            } catch(Exception ex) {
+            } catch (Exception ex) {
                 logger.error(ex.getMessage());
-                response = ex.getMessage();
+                response.put("error", ex.getMessage());
                 return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
             }
         }
-        return new ResponseEntity<>(uri, HttpStatus.ACCEPTED);
+
+        response.put("uri", uri);
+        response.put("prefLabel", prefLabel);
+        return new ResponseEntity<>(response, HttpStatus.ACCEPTED);
     }
 }
