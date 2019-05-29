@@ -64,7 +64,12 @@
             <version>20180130</version>
             <type>jar</type>
         </dependency>
-
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>bson</artifactId>
+            <version>3.8.2</version>
+            <type>jar</type>
+        </dependency>
     </dependencies>
     
  
