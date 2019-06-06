@@ -5,11 +5,11 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.controller;
 
-import com.mongodb.MongoClient;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.CustomConfig.GenericAggregationOperation;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.TheiaVariableRepository;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.MongoDbUtils;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.RDFUtils;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.VariableAssociationsRepository;
-import fr.theia_land.in_situ.backendspringbootassociationvariable.model.Entities.TheiaVariableName;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -35,6 +35,7 @@ import static org.springframework.data.mongodb.core.aggregation.Aggregation.grou
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
+import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.aggregation.OutOperation;
@@ -76,6 +77,9 @@ public class VariableAssociationsController {
     //Indicate that mongoTemplate must be injected by Spring IoC
     @Autowired
     private MongoTemplate mongoTemplate;
+    
+    @Autowired
+    private MongoDbUtils mongoDbUtils;
 
     @GetMapping("/setProducerStats")
     private List<ProducerStat> setProducerStats() {
@@ -182,7 +186,7 @@ public class VariableAssociationsController {
     }
 
     @PostMapping("/setVariablesAlreadyAssociatedToCategories")
-    private List<TheiaVariableName> setVariablesAlreadyAssociatedToCategories(@RequestBody String categories) {
+    private List<Document> setVariablesAlreadyAssociatedToCategories(@RequestBody String categories) {
         JSONArray json = new JSONArray(categories);
         List<String> uriCategories = (List<String>) (List<?>) json.toList();
         List<Criteria> orCriteriasList = new ArrayList<>();
@@ -200,7 +204,7 @@ public class VariableAssociationsController {
         GroupOperation g1 = Aggregation.group("observation.observedProperty.theiaVariable");
         ReplaceRootOperation r1 = Aggregation.replaceRoot("_id");
 
-        return mongoTemplate.aggregate(Aggregation.newAggregation(m1, u1, m2), "observations", TheiaVariableName.class)
+        return mongoTemplate.aggregate(Aggregation.newAggregation(m1, u1, m2, g1, r1), "observations", Document.class)
                 .getMappedResults();
     }
 
@@ -245,7 +249,7 @@ public class VariableAssociationsController {
     }
 
     @PostMapping("/submitAssociation")
-    private boolean submitAssociation(@RequestBody String associationInfo) {
+    private void submitAssociation(@RequestBody String associationInfo) {
         JSONObject json = new JSONObject(associationInfo);
         String producerId = json.getString("producerId");
 
@@ -297,9 +301,10 @@ public class VariableAssociationsController {
             }
             checkPrefLabelForOtherObservations(asso.getString("uri"), asso.getString("prefLabel"), "en");
         });
-        groupDocumentsByVariableAtGivenLocationAndInsertInOtherCollection("observations", "observationsLite", producerId);
-        groupDocumentsByLocationAndInsertInOtherCollection("observationsLite", "mapItems", producerId);
-        return true;
+        mongoDbUtils.groupDocumentsByVariableAtGivenLocationAndInsertInOtherCollection("observations", "observationsLite", producerId);
+        mongoDbUtils.groupDocumentsByLocationAndInsertInOtherCollection("observationsLite", "mapItems", producerId);
+        mongoDbUtils.storeAssociation("variableAssociations", producerId);
+
     }
 
     /**
@@ -339,124 +344,7 @@ public class VariableAssociationsController {
         }
     }
 
-    /**
-     * Group the Document of a collection by variable at a given location for a given dataset. The resulting document
-     * are inserted in a new collection
-     *
-     * @param inputCollectionName String - the collection name from which document are grouped
-     * @param outputCollectionName String - the collection name used to store resulting document of the grouping
-     * operation
-     * @param producerId String - the producerId of the prodcuer inserting the Document. it is used to remove the
-     * relative document previously inserted before update.
-     */
-    private void groupDocumentsByVariableAtGivenLocationAndInsertInOtherCollection(
-            String inputCollectionName, String outputCollectionName, String producerId) {
-
-        deleteDocumentsUsingProducerId(producerId, outputCollectionName);
-
-        /**
-         * All observation matching the producer ID
-         */
-        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-
-        /**
-         * Project the fields used in group operation
-         */
-        ProjectionOperation p1 = Aggregation.project()
-                .and("documentId").as("documentId")
-                .and("producer").as("producer")
-                .and("dataset").as("dataset")
-                .and("observation.featureOfInterest.samplingFeature").as("samplingFeature")
-                .and("observation.observedProperty").as("observedProperty")
-                .and("observation.observedProperty.theiaVariable.uri").as("uri")
-                .and("observation.observedProperty.theiaCategories").as("theiaCategories");
-
-        /**
-         * Group all the observation by producer, dataset, sampling feature et theia variable. The documentId of the
-         * observations grouped are push in an array The observedPorperty of the observation grouped are pushed in an
-         * array in order to keep the information theiaVariable / theiaCategories for each observation
-         */
-        GroupOperation g1 = Aggregation.group(
-                "producer.producerId",
-                "dataset.datasetId",
-                "uri",
-                "theiaCategories",
-                "samplingFeature"
-        )
-                .push("documentId").as("documentId")
-                .push("observedProperty").as("observedProperty")
-                .first("producer").as("producer")
-                .first("dataset").as("dataset");
-
-        /**
-         * Project the result of the group operation before to be inserted in collection
-         */
-        ProjectionOperation p2 = Aggregation.project()
-                .and("documentId").as("documentId")
-                .and("producer").as("producer")
-                .and("dataset").as("dataset")
-                .and("observedProperty").as("observation.observedProperty")
-                .and("_id.samplingFeature").as("observation.featureOfInterest.samplingFeature")
-                .andExclude("_id");
-
-        /**
-         * Insert the result of the aggregation pipeline in the collection
-         */
-        OutOperation o1 = Aggregation.out(outputCollectionName);
-
-        AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-        List<AggregationOperation> aggs = Arrays.asList(m1, p1, g1, p2, o1);
-        mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class);
-
-    }
-
-    /**
-     * Delete all document in a MongoDB collection for a given producerId
-     *
-     * @param collection MongoCollection - the collection where the documents need to be removed
-     * @param producerId String - the producerId used to identify the Document to be removed
-     */
-    private void deleteDocumentsUsingProducerId(String producerId, String collectionName) {
-        Query query = Query.query(where("producer.producerId").is(producerId));
-        mongoTemplate.remove(query, collectionName);
-    }
-
     
-    /**
-     * Group observations from a collection using producerId, datasetId, and location. Store the result in a new collection
-     * @param inputCollectionName name of the input collection 
-     * @param outputCollectionName name of the output collection 
-     * @param producerId producerId
-     */
-    private void groupDocumentsByLocationAndInsertInOtherCollection(
-            String inputCollectionName, String outputCollectionName, String producerId) {
-        
-        deleteDocumentsUsingProducerId(producerId, outputCollectionName);
-
-        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-        
-        ProjectionOperation p1 = Aggregation.project()
-                .and("producer.producerId").as("producerId")
-                .and("dataset.datasetId").as("datasetId")
-                .and("observation.featureOfInterest.samplingFeature").as("samplingFeature")
-                .and("documentId").as("documentId");
-
-        GroupOperation g1 = group(
-                "producerId",
-                "datasetId",
-                "samplingFeature"
-        ).push("documentId").as("documentId");
-        
-        ProjectionOperation p2 = Aggregation.project("documentId")
-                .and("_id.producerId").as("producerId")
-                .and("_id.samplingFeature").as("samplingFeature")
-                .andExclude("_id");
-        
-        OutOperation o1 = Aggregation.out(outputCollectionName);
-        AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-        List<AggregationOperation> aggs = Arrays.asList(m1, p1, g1, p2, o1);
-        mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class);
-
-    }
+    
 
 }
