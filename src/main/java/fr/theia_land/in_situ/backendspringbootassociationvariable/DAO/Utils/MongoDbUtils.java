@@ -208,7 +208,7 @@ public class MongoDbUtils {
 
         // OutOperation o1 = Aggregation.out(outputCollectionName);
         List<Document> associations = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, u1, p2), "observations", Document.class).getMappedResults();
-
+        refreshAssociationSubmited(outputCollectionName, producerId, associations);
     }
 
     public void refreshAssociationSubmited(String collectionName, String producerId, List<Document> associations) {
@@ -219,7 +219,7 @@ public class MongoDbUtils {
 
         GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri")
                 .first("theiaVariable").as("theiaVariable")
-                .first("producer.producerId").as("producerId")
+                .first("producerId").as("producerId")
                 .first("theiaCategories").as("theiaCategories")
                 .addToSet(true).as("isActive");
 
@@ -229,7 +229,7 @@ public class MongoDbUtils {
         
         ProjectionOperation p1 = Aggregation.project()
                 .and("theiaVariable").as("theiaVariable")
-                .and("producer.producerId").as("producerId")
+                .and("producerId").as("producerId")
                 .and("theiaCategories").as("theiaCategories")
                 .andExclude("_id")
                 .and(condOperation).as("isActive");
