@@ -23,15 +23,27 @@ public class ObservedProperty {
      * Unit of the variable
      */
     private List<I18n> unit;
-    /**
-     * Short description of the variable
-     */
-    private List<I18n> description;
-    /**
-     * Gcmd Keywords that the scientist wants to associate to the variable. All the association made by the Theia/OZCAR
-     * team will be associated later.
-     */
-    private List<GcmdKeyword> gcmdKeywords;
+//    /**
+//     * Short description of the variable
+//     */
+//    private List<I18n> description;
+//    /**
+//     * Gcmd Keywords that the scientist wants to associate to the variable. All the association made by the Theia/OZCAR
+//     * team will be associated later.
+//     */
+//    private List<GcmdKeyword> gcmdKeywords;
+    
+    private TheiaVariable theiaVariable;
+
+    public TheiaVariable getTheiaVariable() {
+        return theiaVariable;
+    }
+
+    public void setTheiaVariable(TheiaVariable theiaVariable) {
+        this.theiaVariable = theiaVariable;
+    }
+
+
 
     /**
      * A list of URI of Theia categories to be associated
@@ -54,21 +66,21 @@ public class ObservedProperty {
         this.unit = unit;
     }
 
-    public List<I18n> getDescription() {
-        return description;
-    }
-
-    public void setDescription(List<I18n> description) {
-        this.description = description;
-    }
-
-    public List<GcmdKeyword> getGcmdKeywords() {
-        return gcmdKeywords;
-    }
-
-    public void setGcmdKeywords(List<GcmdKeyword> gcmdKeywords) {
-        this.gcmdKeywords = gcmdKeywords;
-    }
+//    public List<I18n> getDescription() {
+//        return description;
+//    }
+//
+//    public void setDescription(List<I18n> description) {
+//        this.description = description;
+//    }
+//
+//    public List<GcmdKeyword> getGcmdKeywords() {
+//        return gcmdKeywords;
+//    }
+//
+//    public void setGcmdKeywords(List<GcmdKeyword> gcmdKeywords) {
+//        this.gcmdKeywords = gcmdKeywords;
+//    }
 
     public List<String> getTheiaCategories() {
         return theiaCategories;

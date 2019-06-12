@@ -5,7 +5,6 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.http.auth.AuthScope;
@@ -53,7 +52,7 @@ public class RDFUtils {
      * @param prefLabel String - prefLabel of the concept
      * @param categories List\<String\> - lit of categories uri associated to the variables
      */
-    public static void insertSkosVariable(String uri, String prefLabel, List<String> categories) {
+    public static void insertSkosVariable(String uri, String prefLabel, List<String> categories, List<String> exactMatches) {
 
         CredentialsProvider credsProvider = new BasicCredentialsProvider();
         Credentials credentials = new UsernamePasswordCredentials("admin", "pw");
@@ -74,15 +73,30 @@ public class RDFUtils {
         for (String categoryUri : categories) {
             updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:broader <" + categoryUri + ">}}");
         }
+        
+        for(String exactMatchUri : exactMatches) {
+            updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:exactMatch <" + exactMatchUri + ">}}");
+        }
 
         UpdateRequest update;
         UpdateProcessor uExec;
         for (int i = 0; i < updateString.size(); i++) {
 
-                update = UpdateFactory.create(updateString.get(i));
-                uExec = UpdateExecutionFactory.createRemote(update, "http://in-situ.theia-land.fr:3030/theia_vocabulary/", httpclient);
-                uExec.execute();
+            update = UpdateFactory.create(updateString.get(i));
+            uExec = UpdateExecutionFactory.createRemote(update, "http://in-situ.theia-land.fr:3030/theia_vocabulary/", httpclient);
+            uExec.execute();
 
+        }
+    }
+
+    public static String getPrefLabel(String uri) {
+        String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#> "
+                + "SELECT ?o FROM <https://w3id.org/ozcar-theia/> WHERE { ?s ?p ?o . FILTER(?s = <" + uri + "> && ?p = skos:prefLabel)}";
+
+        Query query = QueryFactory.create(queryString);
+        try (QueryExecution qExec = QueryExecutionFactory.createServiceRequest("http://in-situ.theia-land.fr:3030/theia_vocabulary/", query);) {
+            ResultSet rs = qExec.execSelect();            
+            return rs.next().get("o").asLiteral().getString();
         }
     }
 }

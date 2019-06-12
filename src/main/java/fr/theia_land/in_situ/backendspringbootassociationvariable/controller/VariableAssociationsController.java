@@ -77,7 +77,7 @@ public class VariableAssociationsController {
     //Indicate that mongoTemplate must be injected by Spring IoC
     @Autowired
     private MongoTemplate mongoTemplate;
-    
+
     @Autowired
     private MongoDbUtils mongoDbUtils;
 
@@ -121,8 +121,8 @@ public class VariableAssociationsController {
 
             List<Map> tmp = numberOfAssociatedProducerVariables.stream()
                     .filter((t) -> {
-                        Map AssociatedProducerVariable = (Map) t;
-                        return AssociatedProducerVariable.get("producerId").toString().equals(item.get("_id").toString());
+                        Map associatedProducerVariable = (Map) t;
+                        return associatedProducerVariable.get("_id").toString().equals(item.get("_id").toString());
                     }).collect(Collectors.toList());
             if (!tmp.isEmpty()) {
                 producerStat.setAssociated((Integer) tmp.get(0).get("associatedVariablesCount"));
@@ -172,13 +172,14 @@ public class VariableAssociationsController {
         MatchOperation m3 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(false));
         ProjectionOperation p1 = Aggregation.project().and("observation.observedProperty.name").as("name")
                 .and("observation.observedProperty.unit").as("unit")
-                .and("observation.observedProperty.theiaCategories").as("theiaCategories");
-        GroupOperation g1 = Aggregation.group("name", "unit", "theiaCategories");
+                .and("observation.observedProperty.theiaCategories").as("theiaCategories")
+                .and("observation.observedProperty.theiaVariable").as("theiaVariable");
+        GroupOperation g1 = Aggregation.group("name", "unit", "theiaCategories", "theiaVariable");
         ReplaceRootOperation r1 = Aggregation.replaceRoot("_id");
         SortOperation s1 = Aggregation.sort(Sort.Direction.ASC, "name.0.text");
 
         List<List<ObservedProperty>> response = new ArrayList<>();
-        response.add(mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, s1), "observations", ObservedProperty.class)
+        response.add(mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, r1, s1), "observations", ObservedProperty.class)
                 .getMappedResults());
         response.add(mongoTemplate.aggregate(Aggregation.newAggregation(m1, m3, p1, g1, r1, s1), "observations", ObservedProperty.class)
                 .getMappedResults());
@@ -214,6 +215,7 @@ public class VariableAssociationsController {
         JSONObject json = new JSONObject(info);
         String prefLabel = json.getString("prefLabel");
         List<String> categories = (List<String>) (List<?>) (json.getJSONArray("broaders").toList());
+        List<String> exactMatches = (List<String>) (List<?>) (json.getJSONArray("exactMatches").toList());
 
         String uri = Normalizer.normalize(prefLabel, java.text.Normalizer.Form.NFD)
                 .replaceAll("[^\\p{ASCII}]", "")
@@ -224,14 +226,14 @@ public class VariableAssociationsController {
 
             /**
              * Created to avoid circular reference (broader and narrower), if the uri is already used in categories
-             * "Variable" is added at the end of the uri.
+             * vocabulary "Variable" is added at the end of the uri.
              */
             if (RDFUtils.existSkosVariable(uri)) {
                 String uriTmp = new String(uri);
                 uri = uriTmp + "Variable";
             }
             try {
-                RDFUtils.insertSkosVariable(uri, prefLabel, categories);
+                RDFUtils.insertSkosVariable(uri, prefLabel, categories, exactMatches);
             } catch (ARQException ex) {
                 logger.error(ex.getMessage());
                 response.put("error", ex.getMessage());
@@ -307,6 +309,23 @@ public class VariableAssociationsController {
 
     }
 
+    @GetMapping("/getPrefLabelUsingURI")
+    private ResponseEntity<Map<String, String>> getPrefLabelUsingURI(@RequestParam("URI") String uri) {
+         Map<String, String> response = new HashMap();
+        try {
+            response.put("prefLabel", RDFUtils.getPrefLabel(uri));
+            return new ResponseEntity<>(response, HttpStatus.ACCEPTED);
+        } catch (ARQException ex) {
+            logger.error(ex.getMessage());
+            response.put("error", ex.getMessage());
+            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (Exception ex) {
+            logger.error(ex.getMessage());
+            response.put("error", ex.getMessage());
+            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+        }
+    }
+
     /**
      * Find each observation that have the uri in observation.observedProperty.theiaVariable.uri. If the
      * observation.observedProperty.theiaVariable.prefLabel.*.text is not equal to prefLabel for a given language the
@@ -343,8 +362,5 @@ public class VariableAssociationsController {
             }
         }
     }
-
-    
-    
 
 }
