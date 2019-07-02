@@ -86,11 +86,13 @@ public class MongoDbUtils {
                 .and("_id.samplingFeature").as("samplingFeature")
                 .andExclude("_id");
 
-        OutOperation o1 = Aggregation.out(outputCollectionName);
+        //OutOperation o1 = Aggregation.out(outputCollectionName);
 
         AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-        List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2, o1);
-        mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class);
+        List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2);
+        List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class)
+                .getMappedResults();
+        mongoTemplate.insert(documents, outputCollectionName);
 
     }
 
@@ -174,12 +176,14 @@ public class MongoDbUtils {
         /**
          * Insert the result of the aggregation pipeline in the collection
          */
-        OutOperation o1 = Aggregation.out(outputCollectionName);
+        //OutOperation o1 = Aggregation.out(outputCollectionName);
 
         AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-        List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2, o1);
+        List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2);
 
-        mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class);
+        List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class)
+                .getMappedResults();
+        mongoTemplate.insert(documents, outputCollectionName);
 
     }
 
