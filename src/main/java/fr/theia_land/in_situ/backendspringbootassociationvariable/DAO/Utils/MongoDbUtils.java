@@ -5,6 +5,7 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils;
 
+import com.mongodb.client.result.UpdateResult;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.CustomConfig.GenericAggregationOperation;
 import java.util.Arrays;
 import java.util.List;
@@ -195,11 +196,13 @@ public class MongoDbUtils {
         ProjectionOperation p1 = Aggregation.project()
                 .and("producer").as("producer")
                 .and("observation.observedProperty.theiaCategories").as("theiaCategories")
+                .and("observation.observedProperty.name").as("producerVariableName")
                 .and("observation.observedProperty.theiaVariable").as("theiaVariable");
 
         GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri")
                 .first("theiaVariable").as("theiaVariable")
                 .first("producer.producerId").as("producerId")
+                .first("producerVariableName").as("producerVariableName")
                 .first("theiaCategories").as("theiaCategories")
                 .addToSet(true).as("isActive");
 
@@ -217,28 +220,31 @@ public class MongoDbUtils {
         mongoTemplate.updateMulti(query, up1, collectionName);
         mongoTemplate.insert(associations, collectionName);
 
-        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri")
+        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri", "producerVariableName")
                 .first("theiaVariable").as("theiaVariable")
                 .first("producerId").as("producerId")
                 .first("theiaCategories").as("theiaCategories")
+                .first("producerVariableName").as("producerVariableName")
                 .addToSet(true).as("isActive");
 
         Cond condOperation = ConditionalOperators.when(Criteria.where("isActive").ne(false))
-                                    .then(true)
-                                    .otherwise(false);
-        
+                .then(true)
+                .otherwise(false);
+
         ProjectionOperation p1 = Aggregation.project()
                 .and("theiaVariable").as("theiaVariable")
                 .and("producerId").as("producerId")
                 .and("theiaCategories").as("theiaCategories")
+                .and("producerVariableName").as("producerVariableName")
                 .andExclude("_id")
                 .and(condOperation).as("isActive");
-        
-        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(g1,p1), "variableAssociations", Document.class).getMappedResults();
-        
+
+        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(g1, p1), "variableAssociations", Document.class).getMappedResults();
+
         mongoTemplate.remove(query, collectionName);
         mongoTemplate.insert(docs, collectionName);
 
     }
+
 
 }

@@ -5,11 +5,11 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.controller;
 
-import fr.theia_land.in_situ.backendspringbootassociationvariable.CustomConfig.GenericAggregationOperation;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.TheiaVariableRepository;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.MongoDbUtils;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.RDFUtils;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.VariableAssociationsRepository;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.I18n;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -32,13 +32,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import static org.springframework.data.mongodb.core.aggregation.Aggregation.group;
-import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
-import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
-import org.springframework.data.mongodb.core.aggregation.OutOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
 import org.springframework.data.mongodb.core.aggregation.ReplaceRootOperation;
 import org.springframework.data.mongodb.core.aggregation.SortOperation;
@@ -210,8 +207,9 @@ public class VariableAssociationsController {
     }
 
     @PostMapping("/createANewTheiaVariable")
-    private ResponseEntity<Map<String, String>> createANewTheiaVariable(@RequestBody String info) {
-        Map<String, String> response = new HashMap();
+    private ResponseEntity<Document> createANewTheiaVariable(@RequestBody String info) {
+        //Map<String, String> response = new HashMap();
+        Document response = new Document();
         JSONObject json = new JSONObject(info);
         String prefLabel = json.getString("prefLabel");
         List<String> categories = (List<String>) (List<?>) (json.getJSONArray("broaders").toList());
@@ -246,7 +244,12 @@ public class VariableAssociationsController {
         }
 
         response.put("uri", uri);
-        response.put("prefLabel", prefLabel);
+        List<I18n> prefLabels = new ArrayList<>();
+        I18n i18n = new I18n();
+        i18n.setLang("en");
+        i18n.setText(prefLabel);
+        prefLabels.add(i18n);
+        response.put("prefLabel", new JSONArray(prefLabels).toString());
         return new ResponseEntity<>(response, HttpStatus.ACCEPTED);
     }
 
@@ -292,16 +295,29 @@ public class VariableAssociationsController {
             /**
              * Each observation is updated by adding "observation.observaProperty.theiaVariables" object
              */
+            String prefLabelEn = null;
             for (Document doc : documents) {
-                Document theiaVariable = new Document("lang", "en").append("text", asso.getString("prefLabel"));
+                JSONArray prefLabelArray = asso.getJSONArray("prefLabel");
+
+                for (int i = 0; i < prefLabelArray.length(); i++) {
+                    JSONObject jo = prefLabelArray.getJSONObject(i);
+                    if (jo.getString("lang").equals("en")) {
+                        prefLabelEn = jo.getString("text");
+                    }
+                }
+
+                Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
 
                 Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
                 Update update = Update.update("observation.observedProperty.theiaVariable",
                         new Document("uri", asso.getString("uri"))
                                 .append("prefLabel", Arrays.asList(theiaVariable)));
+//                Update update = Update.update("observation.observedProperty.theiaVariable",
+//                        new Document("uri", asso.getString("uri"))
+//                                .append("prefLabel", asso.getJSONArray("prefLabel")));
                 mongoTemplate.updateFirst(query, update, "observations");
             }
-            checkPrefLabelForOtherObservations(asso.getString("uri"), asso.getString("prefLabel"), "en");
+            checkPrefLabelForOtherObservations(asso.getString("uri"), prefLabelEn, "en");
         });
         mongoDbUtils.groupDocumentsByVariableAtGivenLocationAndInsertInOtherCollection("observations", "observationsLite", producerId);
         mongoDbUtils.groupDocumentsByLocationAndInsertInOtherCollection("observationsLite", "mapItems", producerId);
@@ -311,9 +327,14 @@ public class VariableAssociationsController {
 
     @GetMapping("/getPrefLabelUsingURI")
     private ResponseEntity<Map<String, String>> getPrefLabelUsingURI(@RequestParam("URI") String uri) {
-         Map<String, String> response = new HashMap();
+        Map<String, String> response = new HashMap();
         try {
-            response.put("prefLabel", RDFUtils.getPrefLabel(uri));
+            List<I18n> prefLabels = new ArrayList<>();
+            I18n i18n = new I18n();
+            i18n.setLang("en");
+            i18n.setText(RDFUtils.getPrefLabel(uri));
+            prefLabels.add(i18n);
+            response.put("prefLabel", new JSONArray(prefLabels).toString());
             return new ResponseEntity<>(response, HttpStatus.ACCEPTED);
         } catch (ARQException ex) {
             logger.error(ex.getMessage());
