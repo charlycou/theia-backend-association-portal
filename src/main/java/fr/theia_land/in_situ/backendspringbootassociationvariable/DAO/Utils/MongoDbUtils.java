@@ -5,7 +5,6 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils;
 
-import com.mongodb.client.result.UpdateResult;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.CustomConfig.GenericAggregationOperation;
 import java.util.Arrays;
 import java.util.List;
@@ -20,9 +19,9 @@ import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
 import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
 import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
 import org.springframework.data.mongodb.core.aggregation.ConditionalOperators.Cond;
+import org.springframework.data.mongodb.core.aggregation.DateOperators;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
-import org.springframework.data.mongodb.core.aggregation.OutOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
 import org.springframework.data.mongodb.core.aggregation.UnwindOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -63,36 +62,36 @@ public class MongoDbUtils {
     public void groupDocumentsByLocationAndInsertInOtherCollection(
             String inputCollectionName, String outputCollectionName, String producerId) {
 
-        deleteDocumentsUsingProducerId(producerId, outputCollectionName);
-
+        //deleteDocumentsUsingProducerId(producerId, outputCollectionName);
+        mongoTemplate.remove(Query.query(where("producerId").is(producerId)), outputCollectionName);
         MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+        
+        UnwindOperation u1 = Aggregation.unwind("observations");
 
         ProjectionOperation p1 = Aggregation.project()
                 .and("producer.producerId").as("producerId")
                 .and("dataset.datasetId").as("datasetId")
-                .and("observation.featureOfInterest.samplingFeature").as("samplingFeature")
-                .and("documentId").as("documentId");
+                .and("observations.featureOfInterest.samplingFeature").as("samplingFeature")
+                .and("observations.observationId").as("observationId");
 
-        UnwindOperation u1 = Aggregation.unwind("documentId");
-
+        //UnwindOperation u1 = Aggregation.unwind("documentIds");
         GroupOperation g1 = group(
                 "producerId",
                 "datasetId",
                 "samplingFeature"
-        ).push("documentId").as("documentId");
+        ).push("observationId").as("observationIds");
 
-        ProjectionOperation p2 = Aggregation.project("documentId")
+        ProjectionOperation p2 = Aggregation.project("observationIds")
                 .and("_id.producerId").as("producerId")
                 .and("_id.samplingFeature").as("samplingFeature")
                 .andExclude("_id");
 
         //OutOperation o1 = Aggregation.out(outputCollectionName);
-
         AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-        List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2);
-        List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class)
-                .getMappedResults();
-        mongoTemplate.insert(documents, outputCollectionName);
+        //List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2);
+        List<AggregationOperation> aggs = Arrays.asList(m1, u1, p1, g1, p2);
+        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class).getMappedResults();
+        mongoTemplate.insert(docs, outputCollectionName);
 
     }
 
@@ -120,11 +119,17 @@ public class MongoDbUtils {
          * Project the fields used in group operation
          */
         ProjectionOperation p1 = Aggregation.project()
-                .and("documentId").as("documentId")
+                //.and("documentId").as("observation.documentId")
+                .and("observation.observationId").as("observation.observationId")
+                .and(DateOperators.DateFromString.fromStringOf("observation.temporalExtent.dateBeg")).as("observation.temporalExtent.dateBeg")
+                .and(DateOperators.DateFromString.fromStringOf("observation.temporalExtent.dateEnd")).as("observation.temporalExtent.dateEnd")
+                .and("observation.observedProperty").as("observation.observedProperty")
+                .and("observation.featureOfInterest").as("observation.featureOfInterest")
                 .and("producer").as("producer")
                 .and("dataset").as("dataset")
                 .and("observation.featureOfInterest.samplingFeature").as("samplingFeature")
-                .and("observation.observedProperty").as("observedProperty")
+                //                .and("observation.temporalExtent").as("temporalExtent")
+                //                .and("observation.observedProperty").as("observedProperty")
                 .and("observation.observedProperty.theiaVariable.uri").as("uri")
                 .and(ArrayOperators.Filter.filter("observation.observedProperty.name").as("item").by(ComparisonOperators.Eq.valueOf("item.lang").equalToValue("en"))).as("producerVariableName");
 
@@ -142,48 +147,74 @@ public class MongoDbUtils {
          * extended to support Aggregation operation building using Document.class
          */
 
-        String groupJson = "{ '_id' : { \n"
-                + "                        'producerId' : '$producer.producerId' ,\n"
-                + "                        'datasetId' : '$dataset.datasetId' ,\n"
-                + "                        'theiaVariableUri' : {$cond:[{$not: ['$uri']},null, '$uri']},\n"
-                + "                        'producerVariableName' : {$cond:[{$not: ['$uri']},'$producerVariableName.text', null]},\n"
-                + "                        'samplingFeature' : '$samplingFeature'}\n"
-                + "                , 'documentId' : { '$push' : '$documentId'}\n"
-                + "                , 'observedProperty' : { '$push' : '$observedProperty'}\n"
-                + "                , 'samplingFeature' : { '$first' : '$samplingFeature'}\n"
-                + "                , 'producer' : { '$first' : '$producer'}\n"
-                + "                , 'dataset' : { '$first' : '$dataset'}}";
+        String groupJson = "{\n"
+                + "	\"_id\": {\n"
+                + "		\"producerId\": \"$producer.producerId\",\n"
+                + "		\"datasetId\": \"$dataset.datasetId\",\n"
+                + "		\"theiaVariableUri\": {\n"
+                + "			\"$cond\": [{\n"
+                + "				\"$not\": [\"$uri\"]\n"
+                + "			}, null, \"$uri\"]\n"
+                + "		},\n"
+                + "		\"producerVariableName\": {\n"
+                + "			\"$cond\": [{\n"
+                + "				\"$not\": [\"$uri\"]\n"
+                + "			}, \"$producerVariableName.text\", null]\n"
+                + "		},\n"
+                + "		\"samplingFeature\": \"$samplingFeature\"\n"
+                + "	},\n"
+                //                + "	\"documentIds\": {\n"
+                //                + "		\"$push\": \"$documentId\"\n"
+                //                + "	},\n"
+                //                + "	\"observedProperties\": {\n"
+                //                + "		\"$push\": \"$observedProperty\"\n"
+                //                + "	},\n"
+                //                + "	\"samplingFeature\": {\n"
+                //                + "		\"$first\": \"$samplingFeature\"\n"
+                //                + "	},\n"
+                + "	\"producer\": {\n"
+                + "		\"$first\": \"$producer\"\n"
+                + "	},\n"
+                + "	\"dataset\": {\n"
+                + "		\"$first\": \"$dataset\"\n"
+                + "	},\n"
+                + "	\"observations\": {\n"
+                + "		\"$push\": \"$observation\"\n"
+                + "	}\n"
+                //                + "	\"temporalExtents\": {\n"
+                //                + "		\"$push\": \"$temporalExtent\"\n"
+                //                + "	}\n"
+                + "}";
         AggregationOperation g1 = new GenericAggregationOperation("$group", groupJson);
 
         /**
          * Project the result of the group operation before to be inserted in collection
          */
-        ProjectionOperation p2 = Aggregation.project()
-                .and("documentId").as("documentId")
-                .and("producer.producerId").as("producer.producerId")
-                .and("producer.name").as("producer.name")
-                .and("producer.title").as("producer.title")
-                .and("producer.fundings").as("producer.fundings")
-                .and("dataset.datasetId").as("dataset.datasetId")
-                .and("dataset.metadata.title").as("dataset.metadata.title")
-                .and("dataset.metadata.portalSearchCriteria").as("dataset.metadata.portalSearchCriteria")
-                .and("dataset.metadata.keywords").as("dataset.metadata.keywords")
-                .and("dataset.metadata.description").as("dataset.metadata.description")
-                .and("observedProperty").as("observation.observedProperties")
-                .and("samplingFeature").as("observation.featureOfInterest.samplingFeature")
-                .andExclude("_id");
+        String projectJson = "{\n"
+                //                + "	\"documentIds\": 1,\n"
+                + "	\"producer.producerId\": 1,\n"
+                + "	\"producer.name\": 1,\n"
+                + "	\"producer.title\": 1,\n"
+                + "	\"producer.fundings\": 1,\n"
+                + "	\"dataset.datasetId\": 1,\n"
+                + "	\"dataset.metadata.portalSearchCriteria\": 1,\n"
+                + "	\"dataset.metadata.title\": 1,\n"
+                + "	\"dataset.metadata.keywords\": 1,\n"
+                + "	\"dataset.metadata.description\": 1,\n"
+                + "     \"observations\": 1,\n"
+                //                + "	\"observation.observedProperties\": \"$observedProperties\",\n"
+                //                + "	\"observation.temporalExtents\": \"$temporalExtents\",\n"
+                //                + "	\"observation.featureOfInterest.samplingFeature\": \"$samplingFeature\",\n"
+                + "	\"_id\": 0\n"
+                + "}";
+        AggregationOperation p2 = new GenericAggregationOperation("$project", projectJson);
 
         /**
          * Insert the result of the aggregation pipeline in the collection
          */
-        //OutOperation o1 = Aggregation.out(outputCollectionName);
-
         AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
-        List<AggregationOperation> aggs = Arrays.asList(m1, p1, u1, g1, p2);
-
-        List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(aggs).withOptions(options), inputCollectionName, Document.class)
-                .getMappedResults();
-        mongoTemplate.insert(documents, outputCollectionName);
+        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(m1, p1, u1, g1, p2).withOptions(options), inputCollectionName, Document.class).getMappedResults();
+        mongoTemplate.insert(docs, outputCollectionName);
 
     }
 
