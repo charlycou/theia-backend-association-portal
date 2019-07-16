@@ -21,14 +21,36 @@ import org.apache.jena.query.QueryFactory;
 import org.apache.jena.query.ResultSet;
 import org.apache.jena.update.UpdateExecutionFactory;
 import org.apache.jena.update.UpdateFactory;
-import org.apache.jena.update.UpdateProcessor;
-import org.apache.jena.update.UpdateRequest;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /**
  *
  * @author coussotc
  */
+@Component
 public class RDFUtils {
+
+    private static String sparqlUser;
+
+    @Value("${sparql.endpoint.user}")
+    private void setSparqlUser(String user) {
+        sparqlUser = user;
+    }
+
+    private static String sparqlPassword;
+
+    @Value("${sparql.endpoint.password}")
+    private void setSparqlPassword(String password) {
+        sparqlPassword = password;
+    }
+
+    private static String sparqlUrl;
+
+    @Value("${sparql.endpoint.url}")
+    private void setSparqlUrl(String url) {
+        sparqlUrl = url;
+    }
 
     public static boolean existSkosVariable(String uri) {
         String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n"
@@ -38,7 +60,7 @@ public class RDFUtils {
                 + "   <https://w3id.org/ozcar-theia/variableCategories> skos:member <" + uri + ">\n"
                 + "}";
         Query query = QueryFactory.create(queryString);
-        try (QueryExecution qExec = QueryExecutionFactory.createServiceRequest("http://in-situ.theia-land.fr:3030/theia_vocabulary/", query);) {
+        try (QueryExecution qExec = QueryExecutionFactory.createServiceRequest(sparqlUrl, query);) {
 
             ResultSet rs = qExec.execSelect();
             return rs.hasNext();
@@ -52,10 +74,10 @@ public class RDFUtils {
      * @param prefLabel String - prefLabel of the concept
      * @param categories List\<String\> - lit of categories uri associated to the variables
      */
-    public static void insertSkosVariable(String uri, String prefLabel, List<String> categories, List<String> exactMatches) {
+    public static void insertSkosVariable(String uri, String prefLabel, List<String> exactMatches) {
 
         CredentialsProvider credsProvider = new BasicCredentialsProvider();
-        Credentials credentials = new UsernamePasswordCredentials("admin", "pw");
+        Credentials credentials = new UsernamePasswordCredentials(sparqlUser, sparqlPassword);
         credsProvider.setCredentials(AuthScope.ANY, credentials);
         HttpClient httpclient = HttpClients.custom()
                 .setDefaultCredentialsProvider(credsProvider)
@@ -66,36 +88,44 @@ public class RDFUtils {
         updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> a skos:Concept }}");
         updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:inScheme <https://w3id.org/ozcar-theia/ozcarTheiaThesaurus> }}");
         updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA{ GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:prefLabel '" + prefLabel + "'@en} }");
-        updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA{ GRAPH <https://w3id.org/ozcar-theia/> {<https://w3id.org/ozcar-theia/Variables> skos:member <" + uri + "> } }");
-        updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA{ GRAPH <https://w3id.org/ozcar-theia/> {<https://w3id.org/ozcar-theia/Variables> skos:narrower <" + uri + "> } }");
-        updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:broader <https://w3id.org/ozcar-theia/Variables>}}");
+        updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA{ GRAPH <https://w3id.org/ozcar-theia/> {<https://w3id.org/ozcar-theia/variableGroup> skos:member <" + uri + "> } }");
+        updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA{ GRAPH <https://w3id.org/ozcar-theia/> {<https://w3id.org/ozcar-theia/variables> skos:narrower <" + uri + "> } }");
+        updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#> INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:broader <https://w3id.org/ozcar-theia/variables>}}");
 
-        for (String categoryUri : categories) {
-            updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:broader <" + categoryUri + ">}}");
-        }
-        
-        for(String exactMatchUri : exactMatches) {
+//        for (String categoryUri : categories) {
+//            updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:broader <" + categoryUri + ">}}");
+//        }
+        for (String exactMatchUri : exactMatches) {
             updateString.add("PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:exactMatch <" + exactMatchUri + ">}}");
         }
 
-        UpdateRequest update;
-        UpdateProcessor uExec;
-        for (int i = 0; i < updateString.size(); i++) {
+        for (String s : updateString) {
+            UpdateExecutionFactory.createRemote(UpdateFactory.create(s), sparqlUrl, httpclient).execute();
+        }
+    }
 
-            update = UpdateFactory.create(updateString.get(i));
-            uExec = UpdateExecutionFactory.createRemote(update, "http://in-situ.theia-land.fr:3030/theia_vocabulary/", httpclient);
-            uExec.execute();
+    public static void instertSkosBroaders(String uri, List<String> categories) {
+        CredentialsProvider credsProvider = new BasicCredentialsProvider();
+        Credentials credentials = new UsernamePasswordCredentials(sparqlUser, sparqlPassword);
+        credsProvider.setCredentials(AuthScope.ANY, credentials);
+        HttpClient httpclient = HttpClients.custom()
+                .setDefaultCredentialsProvider(credsProvider)
+                .build();
 
+        String update;
+
+        for (String categoryUri : categories) {
+            update = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  INSERT DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uri + "> skos:broader <" + categoryUri + ">}}";
+            UpdateExecutionFactory.createRemote(UpdateFactory.create(update), sparqlUrl, httpclient).execute();
         }
     }
 
     public static String getPrefLabel(String uri) {
         String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#> "
                 + "SELECT ?o FROM <https://w3id.org/ozcar-theia/> WHERE { ?s ?p ?o . FILTER(?s = <" + uri + "> && ?p = skos:prefLabel)}";
-
         Query query = QueryFactory.create(queryString);
-        try (QueryExecution qExec = QueryExecutionFactory.createServiceRequest("http://in-situ.theia-land.fr:3030/theia_vocabulary/", query);) {
-            ResultSet rs = qExec.execSelect();            
+        try (QueryExecution qExec = QueryExecutionFactory.createServiceRequest(sparqlUrl, query);) {
+            ResultSet rs = qExec.execSelect();
             return rs.next().get("o").asLiteral().getString();
         }
     }

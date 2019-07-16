@@ -6,9 +6,11 @@
 package fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils;
 
 import fr.theia_land.in_situ.backendspringbootassociationvariable.CustomConfig.GenericAggregationOperation;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.bson.Document;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
@@ -17,8 +19,6 @@ import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
 import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
-import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
-import org.springframework.data.mongodb.core.aggregation.ConditionalOperators.Cond;
 import org.springframework.data.mongodb.core.aggregation.DateOperators;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
@@ -217,69 +217,112 @@ public class MongoDbUtils {
         mongoTemplate.insert(docs, outputCollectionName);
 
     }
-
+    
     /**
-     * Store the different variable association made for a given producer in a collection. For a given producer, an
-     * associaiton is concidered different if for an identical variable name the categories are different.
-     *
-     * @param outputCollectionName String - the name of the output collection (variableAssociationss)
-     * @param producerId String - the producerId
+     * update or insert a new association in "variableAssociations" collection
+     * @param outputCollectionName name of the collection ("variableAssociations")
+     * @param producerId id of the producer
+     * @param asso JSONObject describing the association
      */
-    public void storeAssociation(String outputCollectionName, String producerId) {
-        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-        MatchOperation m2 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
-        ProjectionOperation p1 = Aggregation.project()
-                .and("producer").as("producer")
-                .and("observation.observedProperty.theiaCategories").as("theiaCategories")
-                .and("observation.observedProperty.name").as("producerVariableName")
-                .and("observation.observedProperty.theiaVariable").as("theiaVariable");
-
-        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri")
-                .first("theiaVariable").as("theiaVariable")
-                .first("producer.producerId").as("producerId")
-                .first("producerVariableName").as("producerVariableName")
-                .first("theiaCategories").as("theiaCategories")
-                .addToSet(true).as("isActive");
-
-        UnwindOperation u1 = Aggregation.unwind("isActive");
-        ProjectionOperation p2 = Aggregation.project().andExclude("_id");
-
-        // OutOperation o1 = Aggregation.out(outputCollectionName);
-        List<Document> associations = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, u1, p2), "observations", Document.class).getMappedResults();
-        refreshAssociationSubmited(outputCollectionName, producerId, associations);
+    public void updateOneVariableAssociation(String outputCollectionName, String producerId, JSONObject asso)  {
+        
+        /**
+             * Storing matching value into lists to find corresponding observation
+             */
+            List<String> variableNames = new ArrayList<>();
+            List<String> unitName = new ArrayList<>();
+            List<String> theiaCategoryUri = new ArrayList<>();
+            asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
+                JSONObject tmp = (JSONObject) item;
+                if ("en".equals(tmp.getString("lang"))) {
+                    variableNames.add(tmp.getString("text"));
+                }
+            });
+            asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
+                JSONObject tmp = (JSONObject) item;
+                unitName.add(tmp.getString("text"));
+            });
+            asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
+                theiaCategoryUri.add((String) item);
+            });
+            String producerVariableNameEn = variableNames.get(0);
+            
+        
+        Query query = Query.query(Criteria.where("producerId").is(producerId)
+        .and("producerVariableNameEn").is(producerVariableNameEn)
+        .and("theiaCategories").in(theiaCategoryUri));
+        Document theiaVariable = new Document("lang", "en").append("text", asso.getJSONArray("prefLabel").getJSONObject(0).getString("text"));
+        Update update = Update.update("isActive", true)
+                .set("theiaVariable",  new Document("uri", asso.getString("uri"))
+                                .append("prefLabel", Arrays.asList(theiaVariable)))
+                .set("producerId", producerId)
+                .set("producerVariableNameEn", producerVariableNameEn)
+                .set("theiaCategories", theiaCategoryUri);
+        mongoTemplate.upsert(query, update, "variableAssociations");
     }
 
-    public void refreshAssociationSubmited(String collectionName, String producerId, List<Document> associations) {
-        Update up1 = Update.update("isActive", false);
-        Query query = Query.query(where("producerId").is(producerId));
-        mongoTemplate.updateMulti(query, up1, collectionName);
-        mongoTemplate.insert(associations, collectionName);
-
-        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri", "producerVariableName")
-                .first("theiaVariable").as("theiaVariable")
-                .first("producerId").as("producerId")
-                .first("theiaCategories").as("theiaCategories")
-                .first("producerVariableName").as("producerVariableName")
-                .addToSet(true).as("isActive");
-
-        Cond condOperation = ConditionalOperators.when(Criteria.where("isActive").ne(false))
-                .then(true)
-                .otherwise(false);
-
-        ProjectionOperation p1 = Aggregation.project()
-                .and("theiaVariable").as("theiaVariable")
-                .and("producerId").as("producerId")
-                .and("theiaCategories").as("theiaCategories")
-                .and("producerVariableName").as("producerVariableName")
-                .andExclude("_id")
-                .and(condOperation).as("isActive");
-
-        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(g1, p1), "variableAssociations", Document.class).getMappedResults();
-
-        mongoTemplate.remove(query, collectionName);
-        mongoTemplate.insert(docs, collectionName);
-
-    }
+//    /**
+//     * Store the different variable association made for a given producer in a collection. For a given producer, an
+//     * associaiton is concidered different if for an identical variable name the categories are different.
+//     *
+//     * @param outputCollectionName String - the name of the output collection (variableAssociationss)
+//     * @param producerId String - the producerId
+//     */
+//    public void storeAssociation(String outputCollectionName, String producerId) {
+//        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+//        MatchOperation m2 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
+//        ProjectionOperation p1 = Aggregation.project()
+//                .and("producer").as("producer")
+//                .and("observation.observedProperty.theiaCategories").as("theiaCategories")
+//                .and("observation.observedProperty.name").as("producerVariableName")
+//                .and("observation.observedProperty.theiaVariable").as("theiaVariable");
+//
+//        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri")
+//                .first("theiaVariable").as("theiaVariable")
+//                .first("producer.producerId").as("producerId")
+//                .first("producerVariableName").as("producerVariableName")
+//                .first("theiaCategories").as("theiaCategories")
+//                .addToSet(true).as("isActive");
+//
+//        UnwindOperation u1 = Aggregation.unwind("isActive");
+//        ProjectionOperation p2 = Aggregation.project().andExclude("_id");
+//
+//        // OutOperation o1 = Aggregation.out(outputCollectionName);
+//        List<Document> associations = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, u1, p2), "observations", Document.class).getMappedResults();
+//        refreshAssociationSubmited(outputCollectionName, producerId, associations);
+//    }
+//
+//    public void refreshAssociationSubmited(String collectionName, String producerId, List<Document> associations) {
+//        Update up1 = Update.update("isActive", false);
+//        Query query = Query.query(where("producerId").is(producerId));
+//        mongoTemplate.updateMulti(query, up1, collectionName);
+//        mongoTemplate.insert(associations, collectionName);
+//
+//        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri", "producerVariableName")
+//                .first("theiaVariable").as("theiaVariable")
+//                .first("producerId").as("producerId")
+//                .first("theiaCategories").as("theiaCategories")
+//                .first("producerVariableName").as("producerVariableName")
+//                .addToSet("isActive").as("isActiveArray");
+//
+//        Cond condOperation = ConditionalOperators.when(Criteria.where("isActiveArray").ne(new Boolean[]{false}))
+//                .then(true)
+//                .otherwise(false);
+//
+//        ProjectionOperation p1 = Aggregation.project()
+//                .and("theiaVariable").as("theiaVariable")
+//                .and("producerId").as("producerId")
+//                .and("theiaCategories").as("theiaCategories")
+//                .and("producerVariableName").as("producerVariableName")
+//                .andExclude("_id")
+//                .and(condOperation).as("isActive");
+//
+//        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(g1, p1), "variableAssociations", Document.class).getMappedResults();
+//
+//        mongoTemplate.remove(query, collectionName);
+//        mongoTemplate.insert(docs, collectionName);
+//
+//    }
 
 
 }

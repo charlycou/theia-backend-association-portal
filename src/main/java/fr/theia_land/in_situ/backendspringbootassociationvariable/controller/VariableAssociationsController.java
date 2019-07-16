@@ -34,6 +34,7 @@ import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import static org.springframework.data.mongodb.core.aggregation.Aggregation.group;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
+import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
@@ -89,22 +90,20 @@ public class VariableAssociationsController {
          * Group operation to get the number of producerVariable per producer in collection "observations"
          */
         ProjectionOperation po1 = Aggregation.project().and("producer.producerId").as("producerId")
-                .and("observation.observedProperty.name").as("name")
+                .and(ArrayOperators.Filter.filter("observation.observedProperty.name").as("item").by(ComparisonOperators.Eq.valueOf("item.lang").equalToValue("en"))).as("producerVariableName")
                 .and("observation.observedProperty.unit").as("unit")
                 .and("observation.observedProperty.theiaCategories").as("theiaCategories");
-//        ProjectionOperation po2 = Aggregation.project().and("observation.observedProperty.name").as("name")
-//                .and("observedProperty.unit").as("unit")
-//                .and("observedProperty.theiaCategories").as("theiaCategories");
-        GroupOperation go1 = Aggregation.group("producerId", "name", "unit", "theiaCategories");
+        GroupOperation go1 = Aggregation.group("producerId", "producerVariableName", "unit", "theiaCategories");
         GroupOperation go2 = Aggregation.group("producerId").count().as("variableCount");
         List<Map> numberOfProducerVariables = mongoTemplate.aggregate(Aggregation.newAggregation(po1, go1, go2).withOptions(options), "observations", Map.class)
                 .getMappedResults();
 
         /**
-         * Group operation to get the number of variable associated per producer in collection "variableAssocation"
+         * Group operation to get the number of variable associated per producer in collection "observations"
          */
-        GroupOperation go3 = group("producerId").count().as("associatedVariablesCount");
-        List<Map> numberOfAssociatedProducerVariables = mongoTemplate.aggregate(Aggregation.newAggregation(go3).withOptions(options), "variableAssociations", Map.class)
+        //GroupOperation go3 = group("producerId").count().as("associatedVariablesCount");
+        MatchOperation m1 = Aggregation.match(Criteria.where("observation.observedProperty.theiaVariable").exists(true));
+        List<Map> numberOfAssociatedProducerVariables = mongoTemplate.aggregate(Aggregation.newAggregation(m1, po1, go1, go2).withOptions(options), "observations", Map.class)
                 .getMappedResults();
 
         /**
@@ -122,7 +121,7 @@ public class VariableAssociationsController {
                         return associatedProducerVariable.get("_id").toString().equals(item.get("_id").toString());
                     }).collect(Collectors.toList());
             if (!tmp.isEmpty()) {
-                producerStat.setAssociated((Integer) tmp.get(0).get("associatedVariablesCount"));
+                producerStat.setAssociated((Integer) tmp.get(0).get("variableCount"));
             } else {
                 producerStat.setAssociated(0);
             }
@@ -231,7 +230,7 @@ public class VariableAssociationsController {
                 uri = uriTmp + "Variable";
             }
             try {
-                RDFUtils.insertSkosVariable(uri, prefLabel, categories, exactMatches);
+                RDFUtils.insertSkosVariable(uri, prefLabel, exactMatches);
             } catch (ARQException ex) {
                 logger.error(ex.getMessage());
                 response.put("error", ex.getMessage());
@@ -253,6 +252,11 @@ public class VariableAssociationsController {
         return new ResponseEntity<>(response, HttpStatus.ACCEPTED);
     }
 
+    /**
+     * Save association between one or several producer variables and theia theia variables.
+     *
+     * @param associationInfo a String that can be parsed into json
+     */
     @PostMapping("/submitAssociation")
     private void submitAssociation(@RequestBody String associationInfo) {
         JSONObject json = new JSONObject(associationInfo);
@@ -267,14 +271,20 @@ public class VariableAssociationsController {
             JSONObject asso = (JSONObject) association;
 
             /**
+             * Mongodb "observations" collection update. The corresponding documents are updated with
+             * "observations.observedProperty.theiaVariable" field.
+             */
+            /**
              * Storing matching value into lists to find corresponding observation
              */
-            List<String> variableName = new ArrayList<>();
+            List<String> variableNames = new ArrayList<>();
             List<String> unitName = new ArrayList<>();
             List<String> theiaCategoryUri = new ArrayList<>();
             asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
                 JSONObject tmp = (JSONObject) item;
-                variableName.add(tmp.getString("text"));
+                if ("en".equals(tmp.getString("lang"))) {
+                    variableNames.add(tmp.getString("text"));
+                }
             });
             asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
                 JSONObject tmp = (JSONObject) item;
@@ -287,7 +297,7 @@ public class VariableAssociationsController {
              * Set match operation for producerId, variable name, unit , theia categories
              */
             MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-            MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(variableName));
+            MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(variableNames));
             MatchOperation m3 = Aggregation.match(where("observation.observedProperty.unit.text").in(unitName));
             MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
             List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
@@ -307,21 +317,36 @@ public class VariableAssociationsController {
                 }
 
                 Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
-
                 Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
                 Update update = Update.update("observation.observedProperty.theiaVariable",
                         new Document("uri", asso.getString("uri"))
                                 .append("prefLabel", Arrays.asList(theiaVariable)));
-//                Update update = Update.update("observation.observedProperty.theiaVariable",
-//                        new Document("uri", asso.getString("uri"))
-//                                .append("prefLabel", asso.getJSONArray("prefLabel")));
                 mongoTemplate.updateFirst(query, update, "observations");
             }
+            /**
+             * If the theia variable correspond to an existing uri with an updated prefLabel, other previously
+             * associated document need to be updated
+             */
             checkPrefLabelForOtherObservations(asso.getString("uri"), prefLabelEn, "en");
+
+            /**
+             * Update the "variableAssociation" collection with one association
+             */
+            mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
+            /**
+             * for the given association the semantic link "skos:broaders" need to be made with the observation
+             * categories
+             */
+            RDFUtils.instertSkosBroaders(asso.getString("uri"), theiaCategoryUri);
         });
+
+        /**
+         * the documents of the collection "observations" are grouped to "observationsLite" and "mapItems" collection
+         * for the given producer.
+         */
         mongoDbUtils.groupDocumentsByVariableAtGivenLocationAndInsertInOtherCollection("observations", "observationsLite", producerId);
         mongoDbUtils.groupDocumentsByLocationAndInsertInOtherCollection("observationsLite", "mapItems", producerId);
-        mongoDbUtils.storeAssociation("variableAssociations", producerId);
+        // mongoDbUtils.storeAssociation("variableAssociations", producerId);
 
     }
 
