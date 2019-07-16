@@ -31,7 +31,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import static org.springframework.data.mongodb.core.aggregation.Aggregation.group;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
 import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
@@ -303,41 +302,58 @@ public class VariableAssociationsController {
             List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
 
             /**
-             * Each observation is updated by adding "observation.observaProperty.theiaVariables" object
+             * if "prefLabel" and "uri" fields are not null the association is made and the documents from the data base
+             * are updated
              */
-            String prefLabelEn = null;
-            for (Document doc : documents) {
-                JSONArray prefLabelArray = asso.getJSONArray("prefLabel");
-
-                for (int i = 0; i < prefLabelArray.length(); i++) {
-                    JSONObject jo = prefLabelArray.getJSONObject(i);
-                    if (jo.getString("lang").equals("en")) {
-                        prefLabelEn = jo.getString("text");
-                    }
+            if (asso.getJSONArray("prefLabel").isEmpty() && asso.isNull("uri")) {
+                for (Document doc : documents) {
+                    Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
+                    Update update = new Update();
+                    update.unset("observation.observedProperty.theiaVariable");
+                   // Update update = Update.update("observation.observedProperty.theiaVariable");
+                    mongoTemplate.updateFirst(query, update, "observations");
                 }
+                mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
+            } else {
 
-                Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
-                Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
-                Update update = Update.update("observation.observedProperty.theiaVariable",
-                        new Document("uri", asso.getString("uri"))
-                                .append("prefLabel", Arrays.asList(theiaVariable)));
-                mongoTemplate.updateFirst(query, update, "observations");
+                /**
+                 * Each observation is updated by adding "observation.observaProperty.theiaVariables" object
+                 */
+                String prefLabelEn = null;
+                for (Document doc : documents) {
+                    JSONArray prefLabelArray = asso.getJSONArray("prefLabel");
+
+                    for (int i = 0; i < prefLabelArray.length(); i++) {
+                        JSONObject jo = prefLabelArray.getJSONObject(i);
+                        if (jo.getString("lang").equals("en")) {
+                            prefLabelEn = jo.getString("text");
+                        }
+                    }
+
+                    Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
+                    Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
+                    Update update = Update.update("observation.observedProperty.theiaVariable",
+                            new Document("uri", asso.getString("uri"))
+                                    .append("prefLabel", Arrays.asList(theiaVariable)));
+                    mongoTemplate.updateFirst(query, update, "observations");
+                }
+                /**
+                 * If the theia variable correspond to an existing uri with an updated prefLabel, other previously
+                 * associated document need to be updated
+                 */
+                checkPrefLabelForOtherObservations(asso.getString("uri"), prefLabelEn, "en");
+
+                /**
+                 * Update the "variableAssociation" collection with one association
+                 */
+                mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
+                /**
+                 * for the given association the semantic link "skos:broaders" need to be made with the observation
+                 * categories
+                 */
+                RDFUtils.instertSkosBroaders(asso.getString("uri"), theiaCategoryUri);
             }
-            /**
-             * If the theia variable correspond to an existing uri with an updated prefLabel, other previously
-             * associated document need to be updated
-             */
-            checkPrefLabelForOtherObservations(asso.getString("uri"), prefLabelEn, "en");
 
-            /**
-             * Update the "variableAssociation" collection with one association
-             */
-            mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
-            /**
-             * for the given association the semantic link "skos:broaders" need to be made with the observation
-             * categories
-             */
-            RDFUtils.instertSkosBroaders(asso.getString("uri"), theiaCategoryUri);
         });
 
         /**
@@ -351,6 +367,7 @@ public class VariableAssociationsController {
     }
 
     @GetMapping("/getPrefLabelUsingURI")
+
     private ResponseEntity<Map<String, String>> getPrefLabelUsingURI(@RequestParam("URI") String uri) {
         Map<String, String> response = new HashMap();
         try {

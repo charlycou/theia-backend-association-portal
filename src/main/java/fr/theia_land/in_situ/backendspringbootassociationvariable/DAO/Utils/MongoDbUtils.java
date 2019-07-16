@@ -65,7 +65,7 @@ public class MongoDbUtils {
         //deleteDocumentsUsingProducerId(producerId, outputCollectionName);
         mongoTemplate.remove(Query.query(where("producerId").is(producerId)), outputCollectionName);
         MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-        
+
         UnwindOperation u1 = Aggregation.unwind("observations");
 
         ProjectionOperation p1 = Aggregation.project()
@@ -217,48 +217,52 @@ public class MongoDbUtils {
         mongoTemplate.insert(docs, outputCollectionName);
 
     }
-    
+
     /**
      * update or insert a new association in "variableAssociations" collection
+     *
      * @param outputCollectionName name of the collection ("variableAssociations")
      * @param producerId id of the producer
      * @param asso JSONObject describing the association
      */
-    public void updateOneVariableAssociation(String outputCollectionName, String producerId, JSONObject asso)  {
-        
+    public void updateOneVariableAssociation(String outputCollectionName, String producerId, JSONObject asso) {
+
         /**
-             * Storing matching value into lists to find corresponding observation
-             */
-            List<String> variableNames = new ArrayList<>();
-            List<String> unitName = new ArrayList<>();
-            List<String> theiaCategoryUri = new ArrayList<>();
-            asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
-                JSONObject tmp = (JSONObject) item;
-                if ("en".equals(tmp.getString("lang"))) {
-                    variableNames.add(tmp.getString("text"));
-                }
-            });
-            asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
-                JSONObject tmp = (JSONObject) item;
-                unitName.add(tmp.getString("text"));
-            });
-            asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
-                theiaCategoryUri.add((String) item);
-            });
-            String producerVariableNameEn = variableNames.get(0);
-            
-        
+         * Storing matching value into lists to find corresponding observation
+         */
+        List<String> variableNames = new ArrayList<>();
+        List<String> unitName = new ArrayList<>();
+        List<String> theiaCategoryUri = new ArrayList<>();
+        asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
+            JSONObject tmp = (JSONObject) item;
+            if ("en".equals(tmp.getString("lang"))) {
+                variableNames.add(tmp.getString("text"));
+            }
+        });
+        asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
+            JSONObject tmp = (JSONObject) item;
+            unitName.add(tmp.getString("text"));
+        });
+        asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
+            theiaCategoryUri.add((String) item);
+        });
+        String producerVariableNameEn = variableNames.get(0);
+
         Query query = Query.query(Criteria.where("producerId").is(producerId)
-        .and("producerVariableNameEn").is(producerVariableNameEn)
-        .and("theiaCategories").in(theiaCategoryUri));
-        Document theiaVariable = new Document("lang", "en").append("text", asso.getJSONArray("prefLabel").getJSONObject(0).getString("text"));
-        Update update = Update.update("isActive", true)
-                .set("theiaVariable",  new Document("uri", asso.getString("uri"))
-                                .append("prefLabel", Arrays.asList(theiaVariable)))
-                .set("producerId", producerId)
-                .set("producerVariableNameEn", producerVariableNameEn)
-                .set("theiaCategories", theiaCategoryUri);
-        mongoTemplate.upsert(query, update, "variableAssociations");
+                .and("producerVariableNameEn").is(producerVariableNameEn)
+                .and("theiaCategories").in(theiaCategoryUri));
+        if (asso.getJSONArray("prefLabel").isEmpty() && asso.isNull("uri")) {
+            mongoTemplate.remove(query, outputCollectionName);
+        } else {
+            Document theiaVariable = new Document("lang", "en").append("text", asso.getJSONArray("prefLabel").getJSONObject(0).getString("text"));
+            Update update = Update.update("isActive", true)
+                    .set("theiaVariable", new Document("uri", asso.getString("uri"))
+                            .append("prefLabel", Arrays.asList(theiaVariable)))
+                    .set("producerId", producerId)
+                    .set("producerVariableNameEn", producerVariableNameEn)
+                    .set("theiaCategories", theiaCategoryUri);
+            mongoTemplate.upsert(query, update, outputCollectionName);
+        }
     }
 
 //    /**
@@ -323,6 +327,4 @@ public class MongoDbUtils {
 //        mongoTemplate.insert(docs, collectionName);
 //
 //    }
-
-
 }
