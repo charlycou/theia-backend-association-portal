@@ -310,7 +310,7 @@ public class VariableAssociationsController {
                     Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
                     Update update = new Update();
                     update.unset("observation.observedProperty.theiaVariable");
-                   // Update update = Update.update("observation.observedProperty.theiaVariable");
+                    // Update update = Update.update("observation.observedProperty.theiaVariable");
                     mongoTemplate.updateFirst(query, update, "observations");
                 }
                 mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
@@ -392,7 +392,7 @@ public class VariableAssociationsController {
     /**
      * Find each observation that have the uri in observation.observedProperty.theiaVariable.uri. If the
      * observation.observedProperty.theiaVariable.prefLabel.*.text is not equal to prefLabel for a given language the
-     * field is updated.
+     * prefLabel field is updated and the corresponding document in the "variableAssociations" collection is updated.
      *
      * @param uri uri of the theiaVariable
      * @param prefLabel prefLabel of the theiaVariable for a given laguage
@@ -410,7 +410,7 @@ public class VariableAssociationsController {
                 where("observation.observedProperty.theiaVariable.prefLabel.lang").is(lang),
                 where("observation.observedProperty.theiaVariable.prefLabel.text").ne(prefLabel)
         ));
-        ProjectionOperation p1 = Aggregation.project("documentId").and(ArrayOperators.IndexOfArray.arrayOf("observation.observedProperty.theiaVariable.prefLabel.lang").indexOf("en")).as("index");
+        ProjectionOperation p1 = Aggregation.project("documentId").and(ArrayOperators.IndexOfArray.arrayOf("observation.observedProperty.theiaVariable.prefLabel.lang").indexOf(lang)).as("index");
         List<Document> responses = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1), "observations", Document.class).getMappedResults();
 
         /**
@@ -422,6 +422,19 @@ public class VariableAssociationsController {
                 Query query = Query.query(new Criteria("documentId").is(obs.getString("documentId")));
                 Update update = Update.update("observation.observedProperty.theiaVariable.prefLabel." + obs.getInteger("index") + ".text", prefLabel);
                 mongoTemplate.updateFirst(query, update, "observations");
+            }
+            /**
+             * The "variableAssociations" document saving association of the "observations" collection matching document
+             * are also updated.
+             */
+            MatchOperation m3 = Aggregation.match(new Criteria("theiaVariable.uri").is(uri));
+            ProjectionOperation p2 = Aggregation.project("_id").and(ArrayOperators.IndexOfArray.arrayOf("theiaVariable.prefLabel.lang").indexOf(lang)).as("index");
+            List<Document> responsesVariableAssociations = mongoTemplate.aggregate(Aggregation.newAggregation(m3, p2), "variableAssociations", Document.class).getMappedResults();
+            for (Document asso : responsesVariableAssociations) {
+
+                Query query = Query.query(new Criteria("_id").is(asso.getObjectId("_id")));
+                Update update = Update.update("theiaVariable.prefLabel." + asso.getInteger("index") + ".text", prefLabel);
+                mongoTemplate.updateFirst(query, update, "variableAssociations");
             }
         }
     }

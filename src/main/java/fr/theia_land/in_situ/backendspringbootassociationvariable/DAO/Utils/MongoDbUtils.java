@@ -219,11 +219,12 @@ public class MongoDbUtils {
     }
 
     /**
-     * update or insert a new association in "variableAssociations" collection
+     * update or insert or remove a new association in "variableAssociations" collection
      *
      * @param outputCollectionName name of the collection ("variableAssociations")
      * @param producerId id of the producer
-     * @param asso JSONObject describing the association
+     * @param asso JSONObject describing the association. if "asso.prefLabel" is empty and "asso.uri" is null, the association
+     * is removed from the collection
      */
     public void updateOneVariableAssociation(String outputCollectionName, String producerId, JSONObject asso) {
 
@@ -254,10 +255,10 @@ public class MongoDbUtils {
         if (asso.getJSONArray("prefLabel").isEmpty() && asso.isNull("uri")) {
             mongoTemplate.remove(query, outputCollectionName);
         } else {
-            Document theiaVariable = new Document("lang", "en").append("text", asso.getJSONArray("prefLabel").getJSONObject(0).getString("text"));
+            Document theiaVariablePrefLabel = new Document("lang", "en").append("text", asso.getJSONArray("prefLabel").getJSONObject(0).getString("text"));
             Update update = Update.update("isActive", true)
                     .set("theiaVariable", new Document("uri", asso.getString("uri"))
-                            .append("prefLabel", Arrays.asList(theiaVariable)))
+                            .append("prefLabel", Arrays.asList(theiaVariablePrefLabel)))
                     .set("producerId", producerId)
                     .set("producerVariableNameEn", producerVariableNameEn)
                     .set("theiaCategories", theiaCategoryUri);
