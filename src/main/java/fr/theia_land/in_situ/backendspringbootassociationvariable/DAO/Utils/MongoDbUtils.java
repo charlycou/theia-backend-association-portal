@@ -223,8 +223,8 @@ public class MongoDbUtils {
      *
      * @param outputCollectionName name of the collection ("variableAssociations")
      * @param producerId id of the producer
-     * @param asso JSONObject describing the association. if "asso.prefLabel" is empty and "asso.uri" is null, the association
-     * is removed from the collection
+     * @param asso JSONObject describing the association. if "asso.prefLabel" is empty and "asso.uri" is null, the
+     * association is removed from the collection
      */
     public void updateOneVariableAssociation(String outputCollectionName, String producerId, JSONObject asso) {
 
@@ -232,7 +232,7 @@ public class MongoDbUtils {
          * Storing matching value into lists to find corresponding observation
          */
         List<String> variableNames = new ArrayList<>();
-        List<String> unitName = new ArrayList<>();
+       // List<String> unitName = new ArrayList<>();
         List<String> theiaCategoryUri = new ArrayList<>();
         asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
             JSONObject tmp = (JSONObject) item;
@@ -240,10 +240,12 @@ public class MongoDbUtils {
                 variableNames.add(tmp.getString("text"));
             }
         });
-        asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
-            JSONObject tmp = (JSONObject) item;
-            unitName.add(tmp.getString("text"));
-        });
+//        asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
+//            JSONObject tmp = (JSONObject) item;
+//            if (!tmp.isNull("text")) {
+//                unitName.add(tmp.getString("text"));
+//            }
+//        });
         asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
             theiaCategoryUri.add((String) item);
         });

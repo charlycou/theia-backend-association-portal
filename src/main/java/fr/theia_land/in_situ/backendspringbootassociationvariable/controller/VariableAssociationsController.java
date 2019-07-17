@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOptions;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
 import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
@@ -279,27 +280,41 @@ public class VariableAssociationsController {
             List<String> variableNames = new ArrayList<>();
             List<String> unitName = new ArrayList<>();
             List<String> theiaCategoryUri = new ArrayList<>();
+            /**
+             * Store all english producer variable name
+             */
             asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
                 JSONObject tmp = (JSONObject) item;
                 if ("en".equals(tmp.getString("lang"))) {
                     variableNames.add(tmp.getString("text"));
                 }
             });
+            /**
+             * Store all non null unit name
+             */
             asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
                 JSONObject tmp = (JSONObject) item;
-                unitName.add(tmp.getString("text"));
+                if (!tmp.isNull("text")) {
+                    unitName.add(tmp.getString("text"));
+                }
             });
+            /**
+             * Store all category uri
+             */
             asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
                 theiaCategoryUri.add((String) item);
             });
             /**
              * Set match operation for producerId, variable name, unit , theia categories
              */
-            MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-            MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(variableNames));
-            MatchOperation m3 = Aggregation.match(where("observation.observedProperty.unit.text").in(unitName));
-            MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
-            List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
+            List<AggregationOperation> aggregationOperations = new ArrayList();
+            aggregationOperations.add(Aggregation.match(where("producer.producerId").is(producerId)));
+            aggregationOperations.add(Aggregation.match(where("observation.observedProperty.name.text").in(variableNames)));
+            if (unitName.size() > 0) {
+                aggregationOperations.add(Aggregation.match(where("observation.observedProperty.unit.text").in(unitName)));
+            }
+            aggregationOperations.add(Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri)));
+            List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(aggregationOperations), "observations", Document.class).getMappedResults();
 
             /**
              * if "prefLabel" and "uri" fields are not null the association is made and the documents from the data base
