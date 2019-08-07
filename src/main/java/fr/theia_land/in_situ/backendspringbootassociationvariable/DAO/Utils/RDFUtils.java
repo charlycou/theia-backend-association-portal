@@ -31,28 +31,28 @@ import org.springframework.stereotype.Component;
 @Component
 public class RDFUtils {
 
-    private static String sparqlUser;
+    private String sparqlUser;
 
     @Value("${sparql.endpoint.user}")
     private void setSparqlUser(String user) {
         sparqlUser = user;
     }
 
-    private static String sparqlPassword;
+    private String sparqlPassword;
 
     @Value("${sparql.endpoint.password}")
     private void setSparqlPassword(String password) {
         sparqlPassword = password;
     }
 
-    private static String sparqlUrl;
+    private String sparqlUrl;
 
     @Value("${sparql.endpoint.url}")
     private void setSparqlUrl(String url) {
         sparqlUrl = url;
     }
 
-    public static boolean existSkosVariable(String uri) {
+    public boolean existSkosVariable(String uri) {
         String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n"
                 + "SELECT *\n"
                 + "FROM <https://w3id.org/ozcar-theia/>\n"
@@ -74,7 +74,7 @@ public class RDFUtils {
      * @param prefLabel String - prefLabel of the concept
      * @param categories List\<String\> - lit of categories uri associated to the variables
      */
-    public static void insertSkosVariable(String uri, String prefLabel, List<String> exactMatches) {
+    public void insertSkosVariable(String uri, String prefLabel, List<String> exactMatches) {
 
         CredentialsProvider credsProvider = new BasicCredentialsProvider();
         Credentials credentials = new UsernamePasswordCredentials(sparqlUser, sparqlPassword);
@@ -104,7 +104,7 @@ public class RDFUtils {
         }
     }
 
-    public static void instertSkosBroaders(String uri, List<String> categories) {
+    public void instertSkosBroaders(String uri, List<String> categories) {
         CredentialsProvider credsProvider = new BasicCredentialsProvider();
         Credentials credentials = new UsernamePasswordCredentials(sparqlUser, sparqlPassword);
         credsProvider.setCredentials(AuthScope.ANY, credentials);
@@ -120,7 +120,7 @@ public class RDFUtils {
         }
     }
 
-    public static String getPrefLabel(String uri) {
+    public String getPrefLabel(String uri) {
         String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#> "
                 + "SELECT ?o FROM <https://w3id.org/ozcar-theia/> WHERE { ?s ?p ?o . FILTER(?s = <" + uri + "> && ?p = skos:prefLabel)}";
         Query query = QueryFactory.create(queryString);

@@ -6,12 +6,21 @@
 package fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils;
 
 import fr.theia_land.in_situ.backendspringbootassociationvariable.CustomConfig.GenericAggregationOperation;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ProducerStat;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.TheiaVariable;
+import io.swagger.annotations.ApiParam;
+import io.swagger.annotations.Example;
+import io.swagger.annotations.ExampleProperty;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.bson.Document;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import static org.springframework.data.mongodb.core.aggregation.Aggregation.group;
@@ -23,12 +32,15 @@ import org.springframework.data.mongodb.core.aggregation.DateOperators;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
+import org.springframework.data.mongodb.core.aggregation.ReplaceRootOperation;
+import org.springframework.data.mongodb.core.aggregation.SortOperation;
 import org.springframework.data.mongodb.core.aggregation.UnwindOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  *
@@ -39,6 +51,193 @@ public class MongoDbUtils {
 
     @Autowired
     private MongoTemplate mongoTemplate;
+
+    /**
+     * For each producer, query the number producer variable associated to theia variable and the number of diffrenet
+     * producer variable. In order to print the state of association work for each producer.
+     *
+     * @return List of ProducerStat - one for each prodcuer
+     */
+    public List<ProducerStat> setProducerStats() {
+        /**
+         * Option to be used in case the group operation take too much RAM
+         */
+        AggregationOptions options = AggregationOptions.builder().allowDiskUse(true).build();
+
+        /**
+         * Group operation to get the number of producerVariable per producer in collection "observations"
+         */
+        ProjectionOperation po1 = Aggregation.project().and("producer.producerId").as("producerId")
+                .and(ArrayOperators.Filter.filter("observation.observedProperty.name").as("item").by(ComparisonOperators.Eq.valueOf("item.lang").equalToValue("en"))).as("producerVariableName")
+                .and("observation.observedProperty.unit").as("unit")
+                .and("observation.observedProperty.theiaCategories").as("theiaCategories");
+        GroupOperation go1 = Aggregation.group("producerId", "producerVariableName", "unit", "theiaCategories");
+        GroupOperation go2 = Aggregation.group("producerId").count().as("variableCount");
+        List<Map> numberOfProducerVariables = mongoTemplate.aggregate(Aggregation.newAggregation(po1, go1, go2).withOptions(options), "observations", Map.class)
+                .getMappedResults();
+
+        /**
+         * Group operation to get the number of variable associated per producer in collection "observations"
+         */
+        MatchOperation m1 = Aggregation.match(Criteria.where("observation.observedProperty.theiaVariable").exists(true));
+        List<Map> numberOfAssociatedProducerVariables = mongoTemplate.aggregate(Aggregation.newAggregation(m1, po1, go1, go2).withOptions(options), "observations", Map.class)
+                .getMappedResults();
+
+        /**
+         * Create the response object containing the stats for each producer
+         */
+        List<ProducerStat> producerStats = new ArrayList<>();
+        numberOfProducerVariables.forEach(item -> {
+            ProducerStat producerStat = new ProducerStat();
+            producerStat.setName(item.get("_id").toString());
+            producerStat.setTotal((Integer) item.get("variableCount"));
+
+            List<Map> tmp = numberOfAssociatedProducerVariables.stream()
+                    .filter((t) -> {
+                        Map associatedProducerVariable = (Map) t;
+                        return associatedProducerVariable.get("_id").toString().equals(item.get("_id").toString());
+                    }).collect(Collectors.toList());
+            if (!tmp.isEmpty()) {
+                producerStat.setAssociated((Integer) tmp.get(0).get("variableCount"));
+            } else {
+                producerStat.setAssociated(0);
+            }
+            producerStats.add(producerStat);
+        });
+        return producerStats;
+    }
+
+    /**
+     * For a given producer, query the non-associated producer variable name and the associated producer variable name.
+     * A producer variables are concidered different if for a same 'name' they have different 'unit' or
+     * 'theiaCateogries'
+     *
+     * @param producerId String value of the producer ID
+     * @return List of List of ObservedProperty.class - Containing
+     * "producerVariableName","unit","theiaCategories","theiaVariable"
+     */
+    public List<List<ObservedProperty>> getDifferentProducerVariableSorted(String producerId) {
+        /**
+         * Match the producer Id
+         */
+        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+        /**
+         * Match the producer variable already associated
+         */
+        MatchOperation m2 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
+        /**
+         * Match the producer variable not associated yet
+         */
+        MatchOperation m3 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(false));
+        /**
+         * Group the same producer variable. Producer variables are concidered different if for a same 'name' they have
+         * different 'unit' or 'theiaCateogries'
+         */
+        ProjectionOperation p1 = Aggregation.project().and("observation.observedProperty.name").as("name")
+                .and("observation.observedProperty.unit").as("unit")
+                .and("observation.observedProperty.theiaCategories").as("theiaCategories")
+                .and("observation.observedProperty.theiaVariable").as("theiaVariable");
+        GroupOperation g1 = Aggregation.group("name", "unit", "theiaCategories", "theiaVariable");
+        ReplaceRootOperation r1 = Aggregation.replaceRoot("_id");
+        /**
+         * Sort by alphabetical order
+         */
+        SortOperation s1 = Aggregation.sort(Sort.Direction.ASC, "name.0.text");
+
+        /**
+         * Execute the aggregation pipeline
+         */
+        List<List<ObservedProperty>> response = new ArrayList<>();
+        response.add(mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, r1, s1), "observations", ObservedProperty.class)
+                .getMappedResults());
+        response.add(mongoTemplate.aggregate(Aggregation.newAggregation(m1, m3, p1, g1, r1, s1), "observations", ObservedProperty.class)
+                .getMappedResults());
+        return response;
+    }
+
+    /**
+     * Find the Theia Varaiable already associated to one or several cateogories. In order to suggest Theia variable to
+     * be associated with for a given producer variable.
+     *
+     * @param categories List of category uri ex: "["https://w3id.org/ozcar-theia/atmosphericRadiation"]"
+     * @return List of Document containing the theia variables
+     */
+    public List<TheiaVariable> getVariablesAlreadyAssociatedToCategories(
+            @ApiParam(required = true,
+                    value = "Example (quotes inside brackets can be badly escaped by UI...):\n [\"https://w3id.org/ozcar-theia/atmosphericRadiation\"]",
+                    examples = @Example(value = {
+                @ExampleProperty(value = "[\"https://w3id.org/ozcar-theia/atmosphericRadiation\"]")
+            }))
+            @RequestBody List<String> categories) {
+        List<Criteria> orCriteriasList = new ArrayList<>();
+        for (String category : categories) {
+            orCriteriasList.add(Criteria.where("observation.observedProperty.theiaCategories").is(category));
+        }
+        Criteria[] orCriterias = new Criteria[orCriteriasList.size()];
+        for (int i = 0; i < orCriteriasList.size(); i++) {
+            orCriterias[i] = orCriteriasList.get(i);
+        }
+
+        MatchOperation m1 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
+        UnwindOperation u1 = Aggregation.unwind("observation.observedProperty.theiaCategories");
+        MatchOperation m2 = Aggregation.match(new Criteria().orOperator(orCriterias));
+        ProjectionOperation p1 = Aggregation.project().and("observation.observedProperty.theiaVariable").as("theiaVariable");
+        GroupOperation g1 = Aggregation.group("theiaVariable");
+        ReplaceRootOperation r1 = Aggregation.replaceRoot("_id");
+
+        return mongoTemplate.aggregate(Aggregation.newAggregation(m1, u1, m2, p1, g1, r1), "observations", TheiaVariable.class)
+                .getMappedResults();
+    }
+
+    /**
+     * Find each observation that have the uri in observation.observedProperty.theiaVariable.uri. If the
+     * observation.observedProperty.theiaVariable.prefLabel.*.text is not equal to prefLabel for a given language the
+     * prefLabel field is updated and the corresponding document in the "variableAssociations" collection is updated.
+     *
+     * @param uri uri of the theiaVariable
+     * @param prefLabel prefLabel of the theiaVariable for a given laguage
+     * @param lang language - sould always be "en"
+     */
+    public void checkPrefLabelForOtherObservations(String uri, String prefLabel, String lang) {
+        /**
+         * Aggregation operations finding all the observations with theiaVariable prefLabel different to prefLabel
+         * method param. The aggregation pipeline return a list of Document containing the documentId of the
+         * observations and the index corresponding to the lang parameter in the prefLabel array - example of prefLabel
+         * (prefLabel: [{"lang":"en", "text": "Air pressure"}, {"lang":"fr", "text": "Pression de l'air"}]
+         */
+        MatchOperation m1 = Aggregation.match(where("observation.observedProperty.theiaVariable.uri").is(uri));
+        MatchOperation m2 = Aggregation.match(new Criteria().andOperator(
+                where("observation.observedProperty.theiaVariable.prefLabel.lang").is(lang),
+                where("observation.observedProperty.theiaVariable.prefLabel.text").ne(prefLabel)
+        ));
+        ProjectionOperation p1 = Aggregation.project("documentId").and(ArrayOperators.IndexOfArray.arrayOf("observation.observedProperty.theiaVariable.prefLabel.lang").indexOf(lang)).as("index");
+        List<Document> responses = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1), "observations", Document.class).getMappedResults();
+
+        /**
+         * If the aggregation pipeline find observation satisflying the match operation, those observations are updated
+         * with the new prefLabel for the given language
+         */
+        if (responses.size() > 0) {
+            for (Document obs : responses) {
+                Query query = Query.query(new Criteria("documentId").is(obs.getString("documentId")));
+                Update update = Update.update("observation.observedProperty.theiaVariable.prefLabel." + obs.getInteger("index") + ".text", prefLabel);
+                mongoTemplate.updateFirst(query, update, "observations");
+            }
+            /**
+             * The "variableAssociations" document saving association of the "observations" collection matching document
+             * are also updated.
+             */
+            MatchOperation m3 = Aggregation.match(new Criteria("theiaVariable.uri").is(uri));
+            ProjectionOperation p2 = Aggregation.project("_id").and(ArrayOperators.IndexOfArray.arrayOf("theiaVariable.prefLabel.lang").indexOf(lang)).as("index");
+            List<Document> responsesVariableAssociations = mongoTemplate.aggregate(Aggregation.newAggregation(m3, p2), "variableAssociations", Document.class).getMappedResults();
+            for (Document asso : responsesVariableAssociations) {
+
+                Query query = Query.query(new Criteria("_id").is(asso.getObjectId("_id")));
+                Update update = Update.update("theiaVariable.prefLabel." + asso.getInteger("index") + ".text", prefLabel);
+                mongoTemplate.updateFirst(query, update, "variableAssociations");
+            }
+        }
+    }
 
     /**
      * Delete all document in a MongoDB collection for a given producerId
@@ -163,15 +362,6 @@ public class MongoDbUtils {
                 + "		},\n"
                 + "		\"samplingFeature\": \"$samplingFeature\"\n"
                 + "	},\n"
-                //                + "	\"documentIds\": {\n"
-                //                + "		\"$push\": \"$documentId\"\n"
-                //                + "	},\n"
-                //                + "	\"observedProperties\": {\n"
-                //                + "		\"$push\": \"$observedProperty\"\n"
-                //                + "	},\n"
-                //                + "	\"samplingFeature\": {\n"
-                //                + "		\"$first\": \"$samplingFeature\"\n"
-                //                + "	},\n"
                 + "	\"producer\": {\n"
                 + "		\"$first\": \"$producer\"\n"
                 + "	},\n"
@@ -181,9 +371,6 @@ public class MongoDbUtils {
                 + "	\"observations\": {\n"
                 + "		\"$push\": \"$observation\"\n"
                 + "	}\n"
-                //                + "	\"temporalExtents\": {\n"
-                //                + "		\"$push\": \"$temporalExtent\"\n"
-                //                + "	}\n"
                 + "}";
         AggregationOperation g1 = new GenericAggregationOperation("$group", groupJson);
 
@@ -191,7 +378,6 @@ public class MongoDbUtils {
          * Project the result of the group operation before to be inserted in collection
          */
         String projectJson = "{\n"
-                //                + "	\"documentIds\": 1,\n"
                 + "	\"producer.producerId\": 1,\n"
                 + "	\"producer.name\": 1,\n"
                 + "	\"producer.title\": 1,\n"
@@ -202,9 +388,6 @@ public class MongoDbUtils {
                 + "	\"dataset.metadata.keywords\": 1,\n"
                 + "	\"dataset.metadata.description\": 1,\n"
                 + "     \"observations\": 1,\n"
-                //                + "	\"observation.observedProperties\": \"$observedProperties\",\n"
-                //                + "	\"observation.temporalExtents\": \"$temporalExtents\",\n"
-                //                + "	\"observation.featureOfInterest.samplingFeature\": \"$samplingFeature\",\n"
                 + "	\"_id\": 0\n"
                 + "}";
         AggregationOperation p2 = new GenericAggregationOperation("$project", projectJson);
@@ -232,7 +415,7 @@ public class MongoDbUtils {
          * Storing matching value into lists to find corresponding observation
          */
         List<String> variableNames = new ArrayList<>();
-       // List<String> unitName = new ArrayList<>();
+        // List<String> unitName = new ArrayList<>();
         List<String> theiaCategoryUri = new ArrayList<>();
         asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
             JSONObject tmp = (JSONObject) item;
@@ -240,12 +423,7 @@ public class MongoDbUtils {
                 variableNames.add(tmp.getString("text"));
             }
         });
-//        asso.getJSONObject("variable").getJSONArray("unit").forEach(item -> {
-//            JSONObject tmp = (JSONObject) item;
-//            if (!tmp.isNull("text")) {
-//                unitName.add(tmp.getString("text"));
-//            }
-//        });
+
         asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
             theiaCategoryUri.add((String) item);
         });
@@ -267,67 +445,4 @@ public class MongoDbUtils {
             mongoTemplate.upsert(query, update, outputCollectionName);
         }
     }
-
-//    /**
-//     * Store the different variable association made for a given producer in a collection. For a given producer, an
-//     * associaiton is concidered different if for an identical variable name the categories are different.
-//     *
-//     * @param outputCollectionName String - the name of the output collection (variableAssociationss)
-//     * @param producerId String - the producerId
-//     */
-//    public void storeAssociation(String outputCollectionName, String producerId) {
-//        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-//        MatchOperation m2 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
-//        ProjectionOperation p1 = Aggregation.project()
-//                .and("producer").as("producer")
-//                .and("observation.observedProperty.theiaCategories").as("theiaCategories")
-//                .and("observation.observedProperty.name").as("producerVariableName")
-//                .and("observation.observedProperty.theiaVariable").as("theiaVariable");
-//
-//        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri")
-//                .first("theiaVariable").as("theiaVariable")
-//                .first("producer.producerId").as("producerId")
-//                .first("producerVariableName").as("producerVariableName")
-//                .first("theiaCategories").as("theiaCategories")
-//                .addToSet(true).as("isActive");
-//
-//        UnwindOperation u1 = Aggregation.unwind("isActive");
-//        ProjectionOperation p2 = Aggregation.project().andExclude("_id");
-//
-//        // OutOperation o1 = Aggregation.out(outputCollectionName);
-//        List<Document> associations = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, p1, g1, u1, p2), "observations", Document.class).getMappedResults();
-//        refreshAssociationSubmited(outputCollectionName, producerId, associations);
-//    }
-//
-//    public void refreshAssociationSubmited(String collectionName, String producerId, List<Document> associations) {
-//        Update up1 = Update.update("isActive", false);
-//        Query query = Query.query(where("producerId").is(producerId));
-//        mongoTemplate.updateMulti(query, up1, collectionName);
-//        mongoTemplate.insert(associations, collectionName);
-//
-//        GroupOperation g1 = Aggregation.group("producer.producerId", "theiaCategories", "theiaVariable.uri", "producerVariableName")
-//                .first("theiaVariable").as("theiaVariable")
-//                .first("producerId").as("producerId")
-//                .first("theiaCategories").as("theiaCategories")
-//                .first("producerVariableName").as("producerVariableName")
-//                .addToSet("isActive").as("isActiveArray");
-//
-//        Cond condOperation = ConditionalOperators.when(Criteria.where("isActiveArray").ne(new Boolean[]{false}))
-//                .then(true)
-//                .otherwise(false);
-//
-//        ProjectionOperation p1 = Aggregation.project()
-//                .and("theiaVariable").as("theiaVariable")
-//                .and("producerId").as("producerId")
-//                .and("theiaCategories").as("theiaCategories")
-//                .and("producerVariableName").as("producerVariableName")
-//                .andExclude("_id")
-//                .and(condOperation).as("isActive");
-//
-//        List<Document> docs = mongoTemplate.aggregate(Aggregation.newAggregation(g1, p1), "variableAssociations", Document.class).getMappedResults();
-//
-//        mongoTemplate.remove(query, collectionName);
-//        mongoTemplate.insert(docs, collectionName);
-//
-//    }
 }
