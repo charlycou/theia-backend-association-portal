@@ -69,7 +69,6 @@
             <version>20180813</version>
             <type>jar</type>
         </dependency>
-
         
         <dependency>
             <groupId>io.springfox</groupId>
