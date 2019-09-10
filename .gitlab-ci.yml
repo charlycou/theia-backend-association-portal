@@ -1,0 +1,12 @@
+image: maven:3.6.0-jdk-8
+
+stages:
+  - build
+
+build_dataportal:
+  stage: build
+  only:
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /^(feat|fix|perf|test)*/i
+  script:
+    - mvn compile jib:build -Djib.to.image=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -Djib.to.auth.username=$CI_REGISTRY_USER -Djib.to.auth.password=$CI_JOB_TOKEN
