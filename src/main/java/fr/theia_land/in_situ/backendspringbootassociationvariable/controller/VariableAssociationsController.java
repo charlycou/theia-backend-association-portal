@@ -54,7 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/association")
-@CrossOrigin(origins = {"http://localhost", "${app.api_host}"})
+@CrossOrigin(origins = "${app.api_host}")
 public class VariableAssociationsController {
 
     private static final Logger logger = LoggerFactory.getLogger(VariableAssociationsController.class);
