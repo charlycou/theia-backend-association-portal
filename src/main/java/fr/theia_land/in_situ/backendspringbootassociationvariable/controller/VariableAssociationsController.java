@@ -31,7 +31,6 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
@@ -55,7 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/association")
-@CrossOrigin(origins = {"http://localhost"})
+@CrossOrigin(origins = {"http://localhost", "${app.api_host}"})
 public class VariableAssociationsController {
 
     private static final Logger logger = LoggerFactory.getLogger(VariableAssociationsController.class);
