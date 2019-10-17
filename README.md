@@ -5,7 +5,7 @@ Repository of the Springboot backend variable association application.
 
 The environement variables below must be positionned on the OS before to start the application:
 
-export MONGODB_URL=mongodb://SITheia:dansKeepass@192.168.51.51:27017
+export MONGODB_URL=mongodb://SITheia:dansKeepass@129.88.191.45:27017
 
 export FUSEKI_SPARQL_ENDPOINT=http://in-situ.theia-land.fr:3030/theia_vocabulary/
 
