@@ -176,7 +176,7 @@ public class VariableAssociationsController {
              * Created to avoid circular reference (broader and narrower), if the uri is already used in categories
              * vocabulary "Variable" is added at the end of the uri.
              */
-            if (rDFUtils.existSkosVariable(uri)) {
+            if (rDFUtils.existSkosCategoryConcept(uri)) {
                 String uriTmp = new String(uri);
                 uri = uriTmp + "Variable";
             }

@@ -52,12 +52,12 @@ public class RDFUtils {
         sparqlUrl = url;
     }
 
-    public boolean existSkosVariable(String uri) {
+    public boolean existSkosCategoryConcept(String uri) {
         String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n"
                 + "SELECT *\n"
                 + "FROM <https://w3id.org/ozcar-theia/>\n"
                 + "WHERE {\n"
-                + "   <https://w3id.org/ozcar-theia/variableCategories> skos:member <" + uri + ">\n"
+                + "   <https://w3id.org/ozcar-theia/variableCategoriesGroup> skos:member <" + uri + ">\n"
                 + "}";
         Query query = QueryFactory.create(queryString);
         try (QueryExecution qExec = QueryExecutionFactory.createServiceRequest(sparqlUrl, query);) {
