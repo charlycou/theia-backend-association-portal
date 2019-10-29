@@ -275,10 +275,6 @@ public class VariableAssociationsController {
                 theiaCategoryUri.add((String) item);
             });
 
-//            /**
-//             * Store theiaVariable uri
-//             */
-//            String theiaVariableUri = asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri");
             /**
              * Set match operation for producerId, variable name, unit , theia categories
              */
@@ -294,8 +290,8 @@ public class VariableAssociationsController {
             }
 
             /**
-             * if "prefLabel" and "uri" fields are not null the association is made and the documents from the data base
-             * are updated
+             * if "prefLabel" and "uri" fields are null the operation is a "delete association". Mongodb "observations"
+             * and "variableAssociation" collections are updated. Semantic links are removed if necessary.
              */
             if (asso.getJSONArray("prefLabel").isEmpty() && asso.isNull("uri")) {
                 for (Document doc : documents) {
@@ -327,14 +323,26 @@ public class VariableAssociationsController {
                         asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri")));
 
                 for (String uri : theiaCategoryUri) {
-                    MatchOperation m8 = Aggregation.match(where("theiaCategories").in(uri));
-                    if (mongoTemplate.aggregate(Aggregation.newAggregation(m6, m8), "variableAssociations", Document.class).getMappedResults().size() == 0) {
+                    MatchOperation m7 = Aggregation.match(where("theiaCategories").in(uri));
+                    if (mongoTemplate.aggregate(Aggregation.newAggregation(m6, m7), "variableAssociations", Document.class).getMappedResults().size() == 0) {
                         rDFUtils.removeSkosBroaders(asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri"), uri);
                     }
                 }
 
-
+                /**
+                 * The operation made is an "association creation" or "association update"
+                 */
             } else {
+                /**
+                 * if the operation is an association update, we store the theiaVariable uri to be updated. This uri is
+                 * used to remove semantic links variableUri/TheiaCateories for each categories of the association if
+                 * they don't exist any more.
+                 */
+                String theiaVariableUri = null;
+                if (documents.get(0).get("observation", Document.class).get("observedProperty", Document.class).containsKey("theiaVariable")) {
+                    theiaVariableUri = documents.get(0).get("observation", Document.class).get("observedProperty", Document.class)
+                            .get("theiaVariable", Document.class).getString("uri");
+                }
 
                 /**
                  * Each observation is updated by adding "observation.observaProperty.theiaVariables" object
@@ -372,6 +380,26 @@ public class VariableAssociationsController {
                  * categories
                  */
                 rDFUtils.instertSkosBroaders(asso.getString("uri"), theiaCategoryUri);
+
+                /**
+                 * If the old theiaVariable/TheiaCategory association don't exists any more in other associations of the
+                 * variableAssociations collection, the semantic links are removed from the thesaurus for each
+                 * categories of the deleted association. Otherwise, if other associations exist, wee check that each
+                 * categories of the deleted association exists among the remaining association of the
+                 * variableAssociations collection. If one theia categories does not exist any more among the remaining
+                 * association, the semantic link theiaVariable/TheiaCategory is removed
+                 */
+                if (theiaVariableUri != null) {
+                    MatchOperation m8 = Aggregation.match(where("theiaVariable.uri").is(
+                            theiaVariableUri));
+                    for (String uri : theiaCategoryUri) {
+                        MatchOperation m9 = Aggregation.match(where("theiaCategories").in(uri));
+                        if (mongoTemplate.aggregate(Aggregation.newAggregation(m8, m9), "variableAssociations", Document.class).getMappedResults().isEmpty()) {
+                            rDFUtils.removeSkosBroaders(asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri"), uri);
+                        }
+                    }
+                }
+
             }
 
         });
