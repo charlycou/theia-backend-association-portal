@@ -120,6 +120,17 @@ public class RDFUtils {
         }
     }
 
+    public void removeSkosBroaders(String uriVariable, String uriCategory) {
+        CredentialsProvider credsProvider = new BasicCredentialsProvider();
+        Credentials credentials = new UsernamePasswordCredentials(sparqlUser, sparqlPassword);
+        credsProvider.setCredentials(AuthScope.ANY, credentials);
+        HttpClient httpclient = HttpClients.custom()
+                .setDefaultCredentialsProvider(credsProvider)
+                .build();
+        String update = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>  DELETE DATA { GRAPH <https://w3id.org/ozcar-theia/> {<" + uriVariable + "> skos:broader <" + uriCategory + ">}}";
+        UpdateExecutionFactory.createRemote(UpdateFactory.create(update), sparqlUrl, httpclient).execute();
+    }
+
     public String getPrefLabel(String uri) {
         String queryString = "PREFIX skos: <http://www.w3.org/2004/02/skos/core#> "
                 + "SELECT ?o FROM <https://w3id.org/ozcar-theia/> WHERE { ?s ?p ?o . FILTER(?s = <" + uri + "> && ?p = skos:prefLabel)}";

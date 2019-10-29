@@ -34,6 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
+import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 import org.springframework.data.mongodb.core.query.Query;
@@ -246,7 +247,7 @@ public class VariableAssociationsController {
             /**
              * Storing matching value into lists to find corresponding observation
              */
-            List<String> variableNames = new ArrayList<>();
+            List<String> producerVariableNames = new ArrayList<>();
             List<String> unitName = new ArrayList<>();
             List<String> theiaCategoryUri = new ArrayList<>();
             /**
@@ -255,7 +256,7 @@ public class VariableAssociationsController {
             asso.getJSONObject("variable").getJSONArray("name").forEach(item -> {
                 JSONObject tmp = (JSONObject) item;
                 if ("en".equals(tmp.getString("lang"))) {
-                    variableNames.add(tmp.getString("text"));
+                    producerVariableNames.add(tmp.getString("text"));
                 }
             });
             /**
@@ -273,17 +274,24 @@ public class VariableAssociationsController {
             asso.getJSONObject("variable").getJSONArray("theiaCategories").forEach(item -> {
                 theiaCategoryUri.add((String) item);
             });
+
+//            /**
+//             * Store theiaVariable uri
+//             */
+//            String theiaVariableUri = asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri");
             /**
              * Set match operation for producerId, variable name, unit , theia categories
              */
-            List<AggregationOperation> aggregationOperations = new ArrayList();
-            aggregationOperations.add(Aggregation.match(where("producer.producerId").is(producerId)));
-            aggregationOperations.add(Aggregation.match(where("observation.observedProperty.name.text").in(variableNames)));
+            List<Document> documents = new ArrayList();
+            MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+            MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(producerVariableNames));
+            MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
             if (unitName.size() > 0) {
-                aggregationOperations.add(Aggregation.match(where("observation.observedProperty.unit.text").in(unitName)));
+                MatchOperation m3 = Aggregation.match(where("observation.observedProperty.unit.text").in(unitName));
+                documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
+            } else {
+                documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4), "observations", Document.class).getMappedResults();
             }
-            aggregationOperations.add(Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri)));
-            List<Document> documents = mongoTemplate.aggregate(Aggregation.newAggregation(aggregationOperations), "observations", Document.class).getMappedResults();
 
             /**
              * if "prefLabel" and "uri" fields are not null the association is made and the documents from the data base
@@ -297,7 +305,35 @@ public class VariableAssociationsController {
                     // Update update = Update.update("observation.observedProperty.theiaVariable");
                     mongoTemplate.updateFirst(query, update, "observations");
                 }
-                mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
+                /**
+                 * The association is removed from the variableAssociations collection if this association does not
+                 * correspond to other observation for the same producer (i.e. the unit can change for a same
+                 * producerVariable/TheiaCategorie couple).
+                 */
+                MatchOperation m5 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
+                if (mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4, m5), "observations", Document.class).getMappedResults().size() == 0) {
+                    mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
+                }
+                /**
+                 * If the theiaVariable/TheiaCategory association don't exists any more in other associations of the
+                 * variableAssociations collection, the semantic links are removed from the thesaurus for each
+                 * categories of the deleted association. Otherwise, if other associations exist, wee check that each
+                 * categories of the deleted association exists among the remaining association of the
+                 * variableAssociations collection. If one theia categories does not exist any more among the remaining
+                 * association, the semantic link theiaVariable/TheiaCategory is removed
+                 */
+
+                MatchOperation m6 = Aggregation.match(where("theiaVariable.uri").is(
+                        asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri")));
+
+                for (String uri : theiaCategoryUri) {
+                    MatchOperation m8 = Aggregation.match(where("theiaCategories").in(uri));
+                    if (mongoTemplate.aggregate(Aggregation.newAggregation(m6, m8), "variableAssociations", Document.class).getMappedResults().size() == 0) {
+                        rDFUtils.removeSkosBroaders(asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri"), uri);
+                    }
+                }
+
+
             } else {
 
                 /**
