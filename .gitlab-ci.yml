@@ -3,10 +3,20 @@ image: maven:3.6.0-jdk-8
 stages:
   - build
 
-build_dataportal:
+build_dataportal_commit:
   stage: build
+  except:
+    - tags
   only:
     variables:
       - $CI_COMMIT_MESSAGE =~ /^(feat|fix|perf|test)*/i
   script:
     - mvn compile jib:build -Djib.to.image=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -Djib.to.auth.username=$CI_REGISTRY_USER -Djib.to.auth.password=$CI_JOB_TOKEN
+    
+    
+build_dataportal_tag:
+  stage: build
+  only:
+    - tags
+  script:
+    - mvn compile jib:build -Djib.to.image=$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG -Djib.to.auth.username=$CI_REGISTRY_USER -Djib.to.auth.password=$CI_JOB_TOKEN
