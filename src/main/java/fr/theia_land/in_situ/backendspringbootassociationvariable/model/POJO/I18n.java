@@ -6,7 +6,6 @@
 package fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO;
 
 /**
- *
  * @author coussotc
  */
 public class I18n {

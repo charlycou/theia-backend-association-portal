@@ -5,8 +5,8 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.controller;
 
-import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.MongoDbUtils;
-import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.Utils.RDFUtils;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.MongoDbUtils;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.RDFUtils;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ProducerStat;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.I18n;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
@@ -15,12 +15,14 @@ import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.Example;
 import io.swagger.annotations.ExampleProperty;
+
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.commons.text.CaseUtils;
 import org.apache.jena.rdfconnection.RDFConnection;
 import org.apache.jena.rdfconnection.RDFConnectionFactory;
@@ -33,10 +35,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
+
 import static org.springframework.data.mongodb.core.query.Criteria.where;
+
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.HttpStatus;
@@ -50,7 +53,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- *
  * @author coussotc
  */
 @RestController
@@ -124,8 +126,8 @@ public class VariableAssociationsController {
             @ApiParam(required = true,
                     value = "Example (quotes inside brackets can be badly escaped by UI...):\n [\"https://w3id.org/ozcar-theia/atmosphericRadiation\"]",
                     examples = @Example(value = {
-                @ExampleProperty(value = "[\"https://w3id.org/ozcar-theia/atmosphericRadiation\"]")
-            }))
+                            @ExampleProperty(value = "[\"https://w3id.org/ozcar-theia/atmosphericRadiation\"]")
+                    }))
             @RequestBody List<String> categories) {
         return mongoDbUtils.getVariablesAlreadyAssociatedToCategories(categories);
     }
@@ -134,8 +136,8 @@ public class VariableAssociationsController {
      * Create in new Theia variable in the Theia OZCAR thesaurus. A new SKOS Concept is pushed in the thesaurus.
      *
      * @param info PrefLabel and URI of the concept to be added. Optionally contains exact match concept from other
-     * thesaurus. ex
-     * "{"uri":"https://w3id.org/ozcar-theia/variables/conductivity","prefLabel":[{"lang":"en","text":"Conductivity"}]}"
+     *             thesaurus. ex
+     *             "{"uri":"https://w3id.org/ozcar-theia/variables/conductivity","prefLabel":[{"lang":"en","text":"Conductivity"}]}"
      * @return ResponseEntity HttpStatus code according to the success or failure of the request. On Success it also
      * return the TheiaVariable added to the thesaurus.
      */
@@ -146,10 +148,10 @@ public class VariableAssociationsController {
     private ResponseEntity<TheiaVariable> createANewTheiaVariable(
             @ApiParam(required = true,
                     value = "Example (quotes inside brackets can be badly escaped by UI...):\n "
-                    + "{\"uri\":\"https://w3id.org/ozcar-theia/variables/conductivity\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Conductivity\"}]}",
+                            + "{\"uri\":\"https://w3id.org/ozcar-theia/variables/conductivity\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Conductivity\"}]}",
                     examples = @Example(value = {
-                @ExampleProperty(value = "{\"uri\":\"https://w3id.org/ozcar-theia/variables/conductivity\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Conductivity\"}]}")
-            }))
+                            @ExampleProperty(value = "{\"uri\":\"https://w3id.org/ozcar-theia/variables/conductivity\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Conductivity\"}]}")
+                    }))
             @RequestBody String info) {
 
         /**
@@ -215,19 +217,19 @@ public class VariableAssociationsController {
      * collection
      *
      * @param associationInfo a String that can be parsed into json ex:
-     * {"producerId":"CATC","associations":[{"variable":{"name":[{"lang":"en","text":"Air
-     * Pressure"}],"unit":[{"lang":"en","text":"mbar"}],"theiaVariable":null,"theiaCategories":["https://w3id.org/ozcar-theia/atmosphericPressure"],"oldIndex":4},"uri":"https://w3id.org/ozcar-theia/atmosphericPressure","prefLabel":[{"lang":"en","text":"Atmospheric
-     * pressure"}]}]}
+     *                        {"producerId":"CATC","associations":[{"variable":{"name":[{"lang":"en","text":"Air
+     *                        Pressure"}],"unit":[{"lang":"en","text":"mbar"}],"theiaVariable":null,"theiaCategories":["https://w3id.org/ozcar-theia/atmosphericPressure"],"oldIndex":4},"uri":"https://w3id.org/ozcar-theia/atmosphericPressure","prefLabel":[{"lang":"en","text":"Atmospheric
+     *                        pressure"}]}]}
      */
     @PostMapping("/submitAssociation")
     @ApiOperation(value = "Save association between one or several producer variables and theia variables using the \"variableAssociations\" collection")
     private void submitAssociation(
             @ApiParam(required = true,
                     value = "Example (quotes inside brackets can be badly escaped by UI...):\n "
-                    + "{\"producerId\":\"CATC\",\"associations\":[{\"variable\":{\"name\":[{\"lang\":\"en\",\"text\":\"Air Pressure\"}],\"unit\":[{\"lang\":\"en\",\"text\":\"mbar\"}],\"theiaVariable\":null,\"theiaCategories\":[\"https://w3id.org/ozcar-theia/atmosphericPressure\"],\"oldIndex\":4},\"uri\":\"https://w3id.org/ozcar-theia/atmosphericPressure\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Atmospheric pressure\"}]}]}",
+                            + "{\"producerId\":\"CATC\",\"associations\":[{\"variable\":{\"name\":[{\"lang\":\"en\",\"text\":\"Air Pressure\"}],\"unit\":[{\"lang\":\"en\",\"text\":\"mbar\"}],\"theiaVariable\":null,\"theiaCategories\":[\"https://w3id.org/ozcar-theia/atmosphericPressure\"],\"oldIndex\":4},\"uri\":\"https://w3id.org/ozcar-theia/atmosphericPressure\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Atmospheric pressure\"}]}]}",
                     examples = @Example(value = {
-                @ExampleProperty(value = "{\"producerId\":\"CATC\",\"associations\":[{\"variable\":{\"name\":[{\"lang\":\"en\",\"text\":\"Air Pressure\"}],\"unit\":[{\"lang\":\"en\",\"text\":\"mbar\"}],\"theiaVariable\":null,\"theiaCategories\":[\"https://w3id.org/ozcar-theia/atmosphericPressure\"],\"oldIndex\":4},\"uri\":\"https://w3id.org/ozcar-theia/atmosphericPressure\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Atmospheric pressure\"}]}]}")
-            }))
+                            @ExampleProperty(value = "{\"producerId\":\"CATC\",\"associations\":[{\"variable\":{\"name\":[{\"lang\":\"en\",\"text\":\"Air Pressure\"}],\"unit\":[{\"lang\":\"en\",\"text\":\"mbar\"}],\"theiaVariable\":null,\"theiaCategories\":[\"https://w3id.org/ozcar-theia/atmosphericPressure\"],\"oldIndex\":4},\"uri\":\"https://w3id.org/ozcar-theia/atmosphericPressure\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Atmospheric pressure\"}]}]}")
+                    }))
             @RequestBody String associationInfo) {
         JSONObject json = new JSONObject(associationInfo);
         String producerId = json.getString("producerId");
@@ -418,7 +420,7 @@ public class VariableAssociationsController {
      * Get the prefLabel of a skos concept using the uri of the concept
      *
      * @param uri String - uri of the concept
-     * @return ResponseEntity<Map<String, String>>
+     * @return ResponseEntity<Map < String, String>>
      */
     @ApiOperation(value = " Get the prefLabel of a skos concept using the uri of the concept",
             response = Map.class,

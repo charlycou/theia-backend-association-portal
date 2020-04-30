@@ -8,12 +8,11 @@ package fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO;
 import java.util.List;
 
 /**
- *
  * @author coussotc
  */
 public class TheiaVariable {
     private String uri;
-    
+
     private List<I18n> prefLabel;
 
     public String getUri() {
@@ -31,6 +30,6 @@ public class TheiaVariable {
     public void setPrefLabel(List<I18n> prefLabel) {
         this.prefLabel = prefLabel;
     }
-    
-    
+
+
 }

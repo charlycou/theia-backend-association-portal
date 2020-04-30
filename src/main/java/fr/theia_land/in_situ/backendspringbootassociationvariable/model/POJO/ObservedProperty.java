@@ -32,7 +32,7 @@ public class ObservedProperty {
 //     * team will be associated later.
 //     */
 //    private List<GcmdKeyword> gcmdKeywords;
-    
+
     private TheiaVariable theiaVariable;
 
     public TheiaVariable getTheiaVariable() {
@@ -42,7 +42,6 @@ public class ObservedProperty {
     public void setTheiaVariable(TheiaVariable theiaVariable) {
         this.theiaVariable = theiaVariable;
     }
-
 
 
     /**
