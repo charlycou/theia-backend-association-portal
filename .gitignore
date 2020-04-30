@@ -29,16 +29,15 @@ target/
 # .project
 # spring-*/src/main/java/META-INF/MANIFEST.MF
 #
-# # IDEA artifacts and output dirs
-# *.iml
-# *.ipr
-# *.iws
-# .idea
-# out
-# test-output
-# atlassian-ide-plugin.xml
-# .gradletasknamecache
-
+## IDEA artifacts and output dirs
+*.iml
+ *.ipr
+ *.iws
+ .idea
+ out
+ test-output
+ atlassian-ide-plugin.xml
+ .gradletasknamecache
 
 
 #### NetBeans ###
