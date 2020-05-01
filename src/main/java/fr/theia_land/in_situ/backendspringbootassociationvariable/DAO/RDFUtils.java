@@ -72,7 +72,7 @@ public class RDFUtils {
      *
      * @param uri        String - uri of the concept variable
      * @param prefLabel  String - prefLabel of the concept
-     * @param categories List\<String\> - lit of categories uri associated to the variables
+     * @param exactMatches List\<String\> - list of SKOS exactMatches concept uri
      */
     public void insertSkosVariable(String uri, String prefLabel, List<String> exactMatches) {
 

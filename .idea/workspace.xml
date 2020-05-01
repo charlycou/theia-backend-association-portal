@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="BranchesTreeState">
+    <expand>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="LOCAL_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="REMOTE_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="REMOTE_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="GROUP_NODE:origin" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+    </expand>
+    <select />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="67123455-d8c5-4b56-8fef-f63b1bfe3cc0" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/src/main/java/fr/theia_land/in_situ/backendspringbootassociationvariable/DAO/RDFUtils.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/fr/theia_land/in_situ/backendspringbootassociationvariable/DAO/RDFUtils.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/fr/theia_land/in_situ/backendspringbootassociationvariable/controller/VariableAssociationsController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/fr/theia_land/in_situ/backendspringbootassociationvariable/controller/VariableAssociationsController.java" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Interface" />
+        <option value="Class" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectId" id="1bGnaTb0iDbeEdzTwduIHpR7sjP" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CreateClassDialog.RecentsKey">
+      <recent name="fr.theia_land.in_situ.backendspringbootassociationvariable.service" />
+    </key>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="67123455-d8c5-4b56-8fef-f63b1bfe3cc0" name="Default Changelist" comment="" />
+      <created>1588267360318</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1588267360318</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="WindowStateProjectService">
+    <state x="508" y="105" width="374" height="583" key="#com.intellij.ide.util.MemberChooser" timestamp="1588341321386">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state x="508" y="105" width="374" height="583" key="#com.intellij.ide.util.MemberChooser/34.27.1332.741@34.27.1332.741" timestamp="1588341321386" />
+    <state width="1284" height="175" key="GridCell.Tab.0.bottom" timestamp="1588341671279">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state width="1284" height="175" key="GridCell.Tab.0.bottom/34.27.1332.741@34.27.1332.741" timestamp="1588341671279" />
+    <state width="1284" height="175" key="GridCell.Tab.0.center" timestamp="1588341671278">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state width="1284" height="175" key="GridCell.Tab.0.center/34.27.1332.741@34.27.1332.741" timestamp="1588341671278" />
+    <state width="1284" height="175" key="GridCell.Tab.0.left" timestamp="1588341671276">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state width="1284" height="175" key="GridCell.Tab.0.left/34.27.1332.741@34.27.1332.741" timestamp="1588341671276" />
+    <state width="1284" height="175" key="GridCell.Tab.0.right" timestamp="1588341671278">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state width="1284" height="175" key="GridCell.Tab.0.right/34.27.1332.741@34.27.1332.741" timestamp="1588341671278" />
+    <state x="233" y="55" width="924" height="682" key="Maven.ArtifactSearchDialog" timestamp="1588338240179">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state x="233" y="55" width="924" height="682" key="Maven.ArtifactSearchDialog/34.27.1332.741@34.27.1332.741" timestamp="1588338240179" />
+    <state x="363" y="89" width="672" height="678" key="search.everywhere.popup" timestamp="1588267488049">
+      <screen x="34" y="27" width="1332" height="741" />
+    </state>
+    <state x="363" y="89" width="672" height="678" key="search.everywhere.popup/34.27.1332.741@34.27.1332.741" timestamp="1588267488049" />
+  </component>
+</project>
