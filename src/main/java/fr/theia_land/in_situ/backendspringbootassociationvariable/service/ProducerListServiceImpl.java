@@ -4,9 +4,11 @@ import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.MongoDbUti
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ProducerStat;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Service
 public class ProducerListServiceImpl implements ProducerListService {
     private final  MongoDbUtils mongoDbUtils;
 

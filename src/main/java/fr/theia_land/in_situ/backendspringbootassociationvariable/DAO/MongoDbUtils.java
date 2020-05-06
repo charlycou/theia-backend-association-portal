@@ -13,6 +13,7 @@ import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.Example;
 import io.swagger.annotations.ExampleProperty;
 import org.bson.Document;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -434,5 +435,104 @@ public class MongoDbUtils {
                     .set("theiaCategories", theiaCategoryUri);
             mongoTemplate.upsert(query, update, outputCollectionName);
         }
+    }
+
+
+    /**
+     * Set match operation for producerId, variable name, unit , theia categories and
+     * query the matching document in "observations" collection
+     *
+     * @param producerId            ID of the producer
+     * @param producerVariableNames List of the producer variable name
+     * @param unitName              list of the producer variable unit
+     * @param theiaCategoryUri      list of the uri of theia category
+     * @return List of matching document from "observations" collection
+     */
+    public List<Document> getObservedPropertyMatchingDocuments(String producerId, List<String> producerVariableNames, List<String> unitName, List<String> theiaCategoryUri) {
+        List<Document> documents = new ArrayList();
+        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+        MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(producerVariableNames));
+        MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
+        if (unitName.size() > 0) {
+            MatchOperation m3 = Aggregation.match(where("observation.observedProperty.unit.text").in(unitName));
+            documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
+        } else {
+            documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4), "observations", Document.class).getMappedResults();
+        }
+        return documents;
+    }
+
+    /**
+     * Delete TheiaVariable field from one document of "observations" collection
+     *
+     * @param documentId id of hte document
+     */
+    public void deleteTheiaVariableKey(String documentId) {
+        Query query = Query.query(new Criteria("documentId").is(documentId));
+        Update update = new Update();
+        update.unset("observation.observedProperty.theiaVariable");
+        mongoTemplate.updateFirst(query, update, "observations");
+    }
+
+    /**
+     * Set match operation for producerId, variable name, unit , theia categories, and existing "theiaVariable" field
+     * and query the matching document in "observations" collection
+     *
+     * @param producerId            ID of the producer
+     * @param producerVariableNames List of the producer variable name
+     * @param theiaCategoryUri      list of the uri of theia category
+     * @return List of matching document from "observations" collection
+     */
+    public List<Document> getTheiaVariableMatchingDocument(String producerId, List<String> producerVariableNames, List<String> theiaCategoryUri) {
+        MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+        MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(producerVariableNames));
+        MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
+        MatchOperation m5 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
+        return mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4, m5), "observations", Document.class)
+                .getMappedResults();
+    }
+
+    /**
+     *
+     * @param theiaVariableUri uri of the theia variable
+     * @param theiaCategoryUri uri of the theia category
+     * @return true if the association theiaVariableUri/theiaCategoryUri exists in "variableAssociations" collection.
+     */
+    public boolean isAssociationExisting(String theiaVariableUri, String theiaCategoryUri) {
+        MatchOperation m6 = Aggregation.match(where("theiaVariable.uri").is(
+                theiaVariableUri));
+        MatchOperation m7 = Aggregation.match(where("theiaCategories").in(theiaCategoryUri));
+        return mongoTemplate.aggregate(Aggregation.newAggregation(m6, m7), "variableAssociations", Document.class).getMappedResults().size() == 0;
+    }
+
+    /**
+     * Each observation is updated by adding "observation.observedProperty.theiaVariables" object in "observations" collection
+     * @param asso association information used to define theiaVariable
+     * @param documents observation document ot be updated
+     * @return english preflabel of the theiaVariable
+     */
+    public String addTheiaVariable(JSONObject asso, List<Document> documents) {
+        /**
+         * Each observation is updated by adding "observation.observedProperty.theiaVariables" object
+         */
+        String prefLabelEn = null;
+        for (Document doc : documents) {
+            JSONArray prefLabelArray = asso.getJSONArray("prefLabel");
+
+            for (int i = 0; i < prefLabelArray.length(); i++) {
+                JSONObject jo = prefLabelArray.getJSONObject(i);
+                if (jo.getString("lang").equals("en")) {
+                    prefLabelEn = jo.getString("text");
+                }
+            }
+
+            Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
+            Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
+            Update update = Update.update("observation.observedProperty.theiaVariable",
+                    new Document("uri", asso.getString("uri"))
+                            .append("prefLabel", Arrays.asList(theiaVariable)));
+            mongoTemplate.updateFirst(query, update, "observations");
+        }
+        return prefLabelEn;
     }
 }

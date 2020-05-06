@@ -3,22 +3,19 @@ package fr.theia_land.in_situ.backendspringbootassociationvariable.service;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.MongoDbUtils;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.DAO.RDFUtils;
 import org.bson.Document;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.MatchOperation;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 
+@Service
 public class AssociationServiceImpl implements AssociationService {
     private final MongoDbUtils mongoDbUtils;
     private final RDFUtils rDFUtils;
@@ -79,19 +76,20 @@ public class AssociationServiceImpl implements AssociationService {
                 theiaCategoryUri.add((String) item);
             });
 
-            /**
-             * Set match operation for producerId, variable name, unit , theia categories
-             */
-            List<Document> documents = new ArrayList();
-            MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
-            MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(producerVariableNames));
-            MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
-            if (unitName.size() > 0) {
-                MatchOperation m3 = Aggregation.match(where("observation.observedProperty.unit.text").in(unitName));
-                documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
-            } else {
-                documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4), "observations", Document.class).getMappedResults();
-            }
+            List<Document> documents = mongoDbUtils.getObservedPropertyMatchingDocuments(producerId,producerVariableNames,unitName,theiaCategoryUri);
+//            /**
+//             * Set match operation for producerId, variable name, unit , theia categories
+//             */
+//            List<Document> documents = new ArrayList();
+//            MatchOperation m1 = Aggregation.match(where("producer.producerId").is(producerId));
+//            MatchOperation m2 = Aggregation.match(where("observation.observedProperty.name.text").in(producerVariableNames));
+//            MatchOperation m4 = Aggregation.match(where("observation.observedProperty.theiaCategories").in(theiaCategoryUri));
+//            if (unitName.size() > 0) {
+//                MatchOperation m3 = Aggregation.match(where("observation.observedProperty.unit.text").in(unitName));
+//                documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m3, m4), "observations", Document.class).getMappedResults();
+//            } else {
+//                documents = mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4), "observations", Document.class).getMappedResults();
+//            }
 
             /**
              * if "prefLabel" and "uri" fields are null the operation is a "delete association". Mongodb "observations"
@@ -99,21 +97,18 @@ public class AssociationServiceImpl implements AssociationService {
              */
             if (asso.getJSONArray("prefLabel").isEmpty() && asso.isNull("uri")) {
                 for (Document doc : documents) {
-                    Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
-                    Update update = new Update();
-                    update.unset("observation.observedProperty.theiaVariable");
-                    // Update update = Update.update("observation.observedProperty.theiaVariable");
-                    mongoTemplate.updateFirst(query, update, "observations");
+                    mongoDbUtils.deleteTheiaVariableKey(doc.getString("documentId"));
                 }
                 /**
-                 * The association is removed from the variableAssociations collection if this association does not
+                 * After deleting the theiaVariable key from documents of the "observations" collection,
+                 * the association is removed from the variableAssociations collection if this association does not
                  * correspond to other observation for the same producer (i.e. the unit can change for a same
                  * producerVariable/TheiaCategorie couple).
                  */
-                MatchOperation m5 = Aggregation.match(where("observation.observedProperty.theiaVariable").exists(true));
-                if (mongoTemplate.aggregate(Aggregation.newAggregation(m1, m2, m4, m5), "observations", Document.class).getMappedResults().size() == 0) {
+                if (mongoDbUtils.getTheiaVariableMatchingDocument(producerId,producerVariableNames,theiaCategoryUri).size() == 0) {
                     mongoDbUtils.updateOneVariableAssociation("variableAssociations", producerId, asso);
                 }
+
                 /**
                  * If the theiaVariable/TheiaCategory association don't exists any more in other associations of the
                  * variableAssociations collection, the semantic links are removed from the thesaurus for each
@@ -122,13 +117,10 @@ public class AssociationServiceImpl implements AssociationService {
                  * variableAssociations collection. If one theia categories does not exist any more among the remaining
                  * association, the semantic link theiaVariable/TheiaCategory is removed
                  */
-
-                MatchOperation m6 = Aggregation.match(where("theiaVariable.uri").is(
-                        asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri")));
+                String theiaVariableUri = asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri");
 
                 for (String uri : theiaCategoryUri) {
-                    MatchOperation m7 = Aggregation.match(where("theiaCategories").in(uri));
-                    if (mongoTemplate.aggregate(Aggregation.newAggregation(m6, m7), "variableAssociations", Document.class).getMappedResults().size() == 0) {
+                    if (mongoDbUtils.isAssociationExisting(theiaVariableUri,uri)) {
                         rDFUtils.removeSkosBroaders(asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri"), uri);
                     }
                 }
@@ -142,33 +134,34 @@ public class AssociationServiceImpl implements AssociationService {
                  * used to remove semantic links variableUri/TheiaCateories for each categories of the association if
                  * they don't exist any more.
                  */
-                String theiaVariableUri = null;
+                String theiaVariableUri = null; //will be null if it is an creation - not null if it is an update
                 if (documents.get(0).get("observation", Document.class).get("observedProperty", Document.class).containsKey("theiaVariable")) {
                     theiaVariableUri = documents.get(0).get("observation", Document.class).get("observedProperty", Document.class)
                             .get("theiaVariable", Document.class).getString("uri");
                 }
 
-                /**
-                 * Each observation is updated by adding "observation.observaProperty.theiaVariables" object
-                 */
-                String prefLabelEn = null;
-                for (Document doc : documents) {
-                    JSONArray prefLabelArray = asso.getJSONArray("prefLabel");
-
-                    for (int i = 0; i < prefLabelArray.length(); i++) {
-                        JSONObject jo = prefLabelArray.getJSONObject(i);
-                        if (jo.getString("lang").equals("en")) {
-                            prefLabelEn = jo.getString("text");
-                        }
-                    }
-
-                    Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
-                    Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
-                    Update update = Update.update("observation.observedProperty.theiaVariable",
-                            new Document("uri", asso.getString("uri"))
-                                    .append("prefLabel", Arrays.asList(theiaVariable)));
-                    mongoTemplate.updateFirst(query, update, "observations");
-                }
+//                /**
+//                 * Each observation is updated by adding "observation.observedProperty.theiaVariables" object
+//                 */
+//                String prefLabelEn = null;
+//                for (Document doc : documents) {
+//                    JSONArray prefLabelArray = asso.getJSONArray("prefLabel");
+//
+//                    for (int i = 0; i < prefLabelArray.length(); i++) {
+//                        JSONObject jo = prefLabelArray.getJSONObject(i);
+//                        if (jo.getString("lang").equals("en")) {
+//                            prefLabelEn = jo.getString("text");
+//                        }
+//                    }
+//
+//                    Document theiaVariable = new Document("lang", "en").append("text", prefLabelEn);
+//                    Query query = Query.query(new Criteria("documentId").is(doc.getString("documentId")));
+//                    Update update = Update.update("observation.observedProperty.theiaVariable",
+//                            new Document("uri", asso.getString("uri"))
+//                                    .append("prefLabel", Arrays.asList(theiaVariable)));
+//                    mongoTemplate.updateFirst(query, update, "observations");
+//                }
+                String prefLabelEn =mongoDbUtils.addTheiaVariable(asso,documents);
                 /**
                  * If the theia variable correspond to an existing uri with an updated prefLabel, other previously
                  * associated document need to be updated
@@ -198,7 +191,7 @@ public class AssociationServiceImpl implements AssociationService {
                             theiaVariableUri));
                     for (String uri : theiaCategoryUri) {
                         MatchOperation m9 = Aggregation.match(where("theiaCategories").in(uri));
-                        if (mongoTemplate.aggregate(Aggregation.newAggregation(m8, m9), "variableAssociations", Document.class).getMappedResults().isEmpty()) {
+                        if (mongoDbUtils.isAssociationExisting(theiaVariableUri,uri)) {
                             rDFUtils.removeSkosBroaders(asso.getJSONObject("variable").getJSONObject("theiaVariable").getString("uri"), uri);
                         }
                     }

@@ -5,9 +5,8 @@
  */
 package fr.theia_land.in_situ.backendspringbootassociationvariable.controller;
 
-import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ProducerStat;
-import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.I18n;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ObservedProperty;
+import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.ProducerStat;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.model.POJO.TheiaVariable;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.service.AssociationService;
 import fr.theia_land.in_situ.backendspringbootassociationvariable.service.ProducerListService;
@@ -17,39 +16,13 @@ import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.Example;
 import io.swagger.annotations.ExampleProperty;
+import org.bson.Document;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-import java.text.Normalizer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import org.apache.commons.text.CaseUtils;
-import org.apache.jena.sparql.ARQException;
-import org.bson.Document;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.MatchOperation;
-import org.springframework.data.mongodb.core.query.Criteria;
-
-import static org.springframework.data.mongodb.core.query.Criteria.where;
-
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 /**
  * @author coussotc
@@ -85,7 +58,7 @@ public class VariableAssociationsController {
             response = ProducerStat.class,
             responseContainer = "List")
     @GetMapping("/setProducerStats")
-    private List<ProducerStat> setProducerStats() {
+    List<ProducerStat> setProducerStats() {
         return producerListService.setProducerStats();
     }
 
@@ -103,7 +76,7 @@ public class VariableAssociationsController {
             response = List.class,
             responseContainer = "List")
     @GetMapping("/setProducerVariables")
-    private List<List<ObservedProperty>> setProducerVariables(
+    List<List<ObservedProperty>> setProducerVariables(
             @ApiParam(required = true,
                     value = "Producer ID",
                     example = "MSEC")
@@ -123,7 +96,7 @@ public class VariableAssociationsController {
             response = Document.class,
             responseContainer = "List")
     @PostMapping("/setVariablesAlreadyAssociatedToCategories")
-    private List<TheiaVariable> setVariablesAlreadyAssociatedToCategories(
+    List<TheiaVariable> setVariablesAlreadyAssociatedToCategories(
             @ApiParam(required = true,
                     value = "Example (quotes inside brackets can be badly escaped by UI...):\n [\"https://w3id.org/ozcar-theia/atmosphericRadiation\"]",
                     examples = @Example(value = {
@@ -146,7 +119,7 @@ public class VariableAssociationsController {
             response = TheiaVariable.class,
             responseContainer = "ResponseEntity")
     @PostMapping("/createANewTheiaVariable")
-    private ResponseEntity<TheiaVariable> createANewTheiaVariable(
+    ResponseEntity<TheiaVariable> createANewTheiaVariable(
             @ApiParam(required = true,
                     value = "Example (quotes inside brackets can be badly escaped by UI...):\n "
                             + "{\"uri\":\"https://w3id.org/ozcar-theia/variables/conductivity\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Conductivity\"}]}",
@@ -168,7 +141,7 @@ public class VariableAssociationsController {
      */
     @PostMapping("/submitAssociation")
     @ApiOperation(value = "Save association between one or several producer variables and theia variables using the \"variableAssociations\" collection")
-    private void submitAssociation(
+    void submitAssociation(
             @ApiParam(required = true,
                     value = "Example (quotes inside brackets can be badly escaped by UI...):\n "
                             + "{\"producerId\":\"CATC\",\"associations\":[{\"variable\":{\"name\":[{\"lang\":\"en\",\"text\":\"Air Pressure\"}],\"unit\":[{\"lang\":\"en\",\"text\":\"mbar\"}],\"theiaVariable\":null,\"theiaCategories\":[\"https://w3id.org/ozcar-theia/atmosphericPressure\"],\"oldIndex\":4},\"uri\":\"https://w3id.org/ozcar-theia/atmosphericPressure\",\"prefLabel\":[{\"lang\":\"en\",\"text\":\"Atmospheric pressure\"}]}]}",
@@ -189,7 +162,7 @@ public class VariableAssociationsController {
             response = Map.class,
             responseContainer = "ResponseEntity")
     @GetMapping("/getPrefLabelUsingURI")
-    private ResponseEntity<Map<String, String>> getPrefLabelUsingURI(
+    ResponseEntity<Map<String, String>> getPrefLabelUsingURI(
             @ApiParam(required = true,
                     example = "https://w3id.org/ozcar-theia/atmosphericTemperature")
             @RequestParam("URI") String uri) {
